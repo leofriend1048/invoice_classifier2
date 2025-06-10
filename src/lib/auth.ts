@@ -19,10 +19,15 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 export const auth = betterAuth({
   database: new Pool({
     connectionString: databaseUrl,
+    max: 20, // Maximum number of connections in the pool
+    idleTimeoutMillis: 30000, // Close idle connections after 30 seconds
+    connectionTimeoutMillis: 2000, // Timeout if connection can't be established
+    allowExitOnIdle: true, // Allow the pool to exit when all connections are idle
   }),
   trustedOrigins: [
     "http://localhost:3000",
-    process.env.NEXT_PUBLIC_BASE_URL || "https://invoice-classifier-bay.vercel.app"
+    "https://invoice-classifier-bay.vercel.app",
+    ...(process.env.NEXT_PUBLIC_BASE_URL ? [process.env.NEXT_PUBLIC_BASE_URL] : [])
   ],
   emailVerification: {
     sendVerificationEmail: async ({ user, url }) => {
