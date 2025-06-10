@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 export async function GET(request: NextRequest) {
   try {
     console.log('🕐 Cron job started: Gmail backfill');
@@ -18,25 +22,41 @@ export async function GET(request: NextRequest) {
 
     console.log(`📡 Making internal call to: ${baseUrl}/api/gmail/backfill`);
 
-    // Call the backfill endpoint internally
-    const backfillResponse = await fetch(`${baseUrl}/api/gmail/backfill`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        maxEmails: 100, // Process up to 100 emails per day
-        skipProcessing: false // Include GPT-4o processing
-      })
-    });
+    // Retry logic for the internal fetch
+    const maxRetries = 3;
+    let attempt = 0;
+    let backfillResponse: Response | null = null;
+    let fetchError: any = null;
+    while (attempt < maxRetries) {
+      try {
+        backfillResponse = await fetch(`${baseUrl}/api/gmail/backfill`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            maxEmails: 100, // Process up to 100 emails per day
+            skipProcessing: false // Include GPT-4o processing
+          })
+        });
+        if (backfillResponse.ok) break;
+        fetchError = await backfillResponse.text();
+        console.error(`❌ Backfill API call failed (attempt ${attempt + 1}):`, fetchError);
+      } catch (err) {
+        fetchError = err instanceof Error ? err.message : String(err);
+        console.error(`❌ Fetch error (attempt ${attempt + 1}):`, fetchError);
+      }
+      attempt++;
+      if (attempt < maxRetries) await sleep(1000 * attempt); // Exponential backoff
+    }
 
-    if (!backfillResponse.ok) {
-      const errorText = await backfillResponse.text();
-      console.error('❌ Backfill API call failed:', errorText);
-      return NextResponse.json({ 
-        error: 'Backfill failed', 
-        details: errorText 
-      }, { status: 500 });
+    if (!backfillResponse || !backfillResponse.ok) {
+      return NextResponse.json({
+        success: false,
+        error: 'Backfill failed',
+        details: fetchError || 'Unknown error',
+        attempts: attempt
+      });
     }
 
     const result = await backfillResponse.json();
@@ -52,8 +72,9 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('❌ Cron job error:', error);
     return NextResponse.json({ 
+      success: false,
       error: 'Cron job failed', 
       details: error instanceof Error ? error.message : 'Unknown error' 
-    }, { status: 500 });
+    });
   }
 } 

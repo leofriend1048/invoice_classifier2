@@ -31,6 +31,31 @@ function DataTableSelectCell({ row, rowIndex }: { row: any; rowIndex: number }) 
   )
 }
 
+function PaidSwitchCell({ invoice }: { invoice: any }) {
+  const [loading, setLoading] = React.useState(false);
+  const [isPaid, setIsPaid] = React.useState(!!invoice.is_paid);
+  React.useEffect(() => {
+    setIsPaid(!!invoice.is_paid);
+  }, [invoice.is_paid]);
+  return (
+    <Switch
+      checked={isPaid}
+      onCheckedChange={async (checked) => {
+        setIsPaid(checked);
+        setLoading(true);
+        await fetch("/api/invoice-paid-toggle", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: invoice.id, is_paid: checked }),
+        });
+        setLoading(false);
+      }}
+      size="small"
+      disabled={loading}
+    />
+  );
+}
+
 export const getColumns = ({
   onEditClick,
 }: {
@@ -171,32 +196,7 @@ export const getColumns = ({
         className: "text-left",
         displayName: "Paid",
       },
-      // Note: Using React hooks inside cell renderer is safe in TanStack Table v8+ with client-side rendering
-      cell: ({ row }) => {
-        const invoice = row.original;
-        const [loading, setLoading] = React.useState(false);
-        const [isPaid, setIsPaid] = React.useState(!!invoice.is_paid);
-        React.useEffect(() => {
-          setIsPaid(!!invoice.is_paid);
-        }, [invoice.is_paid]);
-        return (
-          <Switch
-            checked={isPaid}
-            onCheckedChange={async (checked) => {
-              setIsPaid(checked);
-              setLoading(true);
-              await fetch("/api/invoice-paid-toggle", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ id: invoice.id, is_paid: checked }),
-              });
-              setLoading(false);
-            }}
-            size="small"
-            disabled={loading}
-          />
-        );
-      },
+      cell: ({ row }) => <PaidSwitchCell invoice={row.original} />,
     }),
     columnHelper.accessor("gl_account", {
       header: ({ column }) => (

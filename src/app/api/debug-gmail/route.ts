@@ -6,7 +6,9 @@ import { google } from 'googleapis';
 import { NextRequest, NextResponse } from 'next/server';
 import * as path from 'path';
 
-export async function GET(request: NextRequest) {
+export const dynamic = "force-dynamic";
+
+export async function GET(_request: NextRequest) {
   try {
     // 1) Load tokens from data/gmail-tokens.json (outside of src/)
     const tokensPath = path.join(process.cwd(), 'data', 'gmail-tokens.json');

@@ -1,9 +1,12 @@
+export const dynamic = "force-dynamic";
+
+import { classifyInvoice, updateVendorProfile } from '@/lib/classification';
 import {
-    downloadAttachment,
-    extractAttachmentsFromMessage,
-    getFreshGmailClient,
-    getMessage,
-    isInvoiceFile
+  downloadAttachment,
+  extractAttachmentsFromMessage,
+  getFreshGmailClient,
+  getMessage,
+  isInvoiceFile
 } from '@/lib/google/gmail';
 import { getStoredTokensForEmail } from '@/lib/google/token-storage';
 import { extractInvoiceDataWithGPT4o } from '@/lib/openai';
@@ -248,13 +251,40 @@ export async function POST(req: NextRequest) {
                 // Add this signature to our tracking set
                 existingInvoiceSignatures.add(invoiceSignature);
 
-                // Update invoice with extracted data
+                console.log('✅ GPT-4o extraction successful');
+                
+                // Now classify the invoice (MISSING STEP FROM BACKFILL!)
+                console.log('🔍 Starting invoice classification...');
+                const classification = await classifyInvoice(
+                  extractedData.vendor_name || initialInvoiceData.vendor_name,
+                  extractedData.amount || 0,
+                  extractedData.extracted_text || initialInvoiceData.extracted_text
+                );
+                
+                console.log('✅ Classification completed:', classification);
+
+                // Update invoice with extracted data AND classification
                 const updateData = {
                   vendor_name: extractedData.vendor_name || initialInvoiceData.vendor_name,
                   invoice_date: extractedData.invoice_date,
                   due_date: extractedData.due_date,
                   amount: extractedData.amount,
                   extracted_text: extractedData.extracted_text || initialInvoiceData.extracted_text,
+                  gl_account: classification.gl_account,
+                  branch: classification.branch,
+                  division: classification.division,
+                  payment_method: classification.payment_method,
+                  category: classification.category,
+                  subcategory: classification.subcategory,
+                  description: classification.description,
+                  classification_suggestion: {
+                    category: classification.category,
+                    subcategory: classification.subcategory,
+                    description: classification.description,
+                    confidence: classification.confidence,
+                    method: classification.method,
+                    pattern_id: classification.pattern_id
+                  },
                   updated_at: new Date().toISOString()
                 };
 
@@ -263,7 +293,18 @@ export async function POST(req: NextRequest) {
                   .update(updateData)
                   .eq('id', invoiceRecord.id);
 
-                console.log('✅ Invoice updated with GPT-4o data');
+                console.log('✅ Invoice updated with GPT-4o data and classification');
+
+                // Update vendor profile (ANOTHER MISSING STEP!)
+                if (extractedData.vendor_name && extractedData.amount) {
+                  console.log('👤 Updating vendor profile...');
+                  await updateVendorProfile(
+                    extractedData.vendor_name,
+                    classification.category,
+                    extractedData.amount
+                  );
+                  console.log('✅ Vendor profile updated');
+                }
               }
             } catch (gptError) {
               console.error('⚠️ GPT-4o processing failed:', gptError);

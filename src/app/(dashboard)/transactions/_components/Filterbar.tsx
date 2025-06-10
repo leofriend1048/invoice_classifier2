@@ -3,10 +3,10 @@ import { DataTableFilter } from "@/components/DataTableFilter"
 import { Searchbar } from "@/components/Searchbar"
 import { RiDownloadLine } from "@remixicon/react"
 import { Table } from "@tanstack/react-table"
-import { useState } from "react"
+import { useMemo, useState } from "react"
 
 // Placeholder for ViewOptions; replace with your actual component if available
-function ViewOptions({ table }: { table: Table<any> }) {
+function ViewOptions() {
   return (
     <Button variant="secondary" className="px-2 py-1.5 text-sm">View</Button>
   )
@@ -14,6 +14,17 @@ function ViewOptions({ table }: { table: Table<any> }) {
 
 export function Filterbar<TData>({ table }: { table: Table<TData> }) {
   const [searchTerm, setSearchTerm] = useState("")
+
+  // Dynamically get unique category options from the table data
+  const categoryOptions = useMemo(() => {
+    const col = table.getColumn("category")
+    if (!col) return []
+    const values = table.getPreFilteredRowModel().rows
+      .map(row => row.getValue("category"))
+      .filter(Boolean) as string[]
+    const unique = Array.from(new Set(values))
+    return unique.map((cat) => ({ label: cat, value: cat }))
+  }, [table.getPreFilteredRowModel().rows])
 
   function handleSearchChange(e: React.ChangeEvent<HTMLInputElement>) {
     setSearchTerm(e.target.value)
@@ -43,16 +54,6 @@ export function Filterbar<TData>({ table }: { table: Table<TData> }) {
     { label: "Pending", value: "pending" },
     { label: "Approved", value: "approved" },
     { label: "Rejected", value: "rejected" },
-  ]
-  const paidOptions = [
-    { label: "Paid", value: "paid" },
-    { label: "Unpaid", value: "unpaid" },
-  ]
-  const categoryOptions = [
-    { label: "Professional Services", value: "Professional Services" },
-    { label: "Creative Services", value: "Creative Services" },
-    { label: "Consulting", value: "Consulting" },
-    // ...add more as needed
   ]
   const amountConditionOptions = [
     { label: "Greater than", value: "greater-than" },
@@ -117,7 +118,7 @@ export function Filterbar<TData>({ table }: { table: Table<TData> }) {
           <RiDownloadLine className="size-4 shrink-0" aria-hidden="true" />
           Export
         </Button>
-        <ViewOptions table={table} />
+        <ViewOptions />
       </div>
     </div>
   )

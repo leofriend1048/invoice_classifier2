@@ -18,11 +18,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/Tabs"
 import { categories, Invoice, invoice_statuses, subcategories } from "@/data/schema"
 import { formatters } from "@/lib/utils"
 import { createClient } from "@supabase/supabase-js"
-import axios from "axios"
 import { format } from "date-fns"
-import { Download, File, Trash2 } from "lucide-react"
 import React, { useEffect, useState } from "react"
-import { useDropzone } from "react-dropzone"
 
 interface DataTableDrawerProps {
   open: boolean
@@ -39,11 +36,6 @@ export function DataTableDrawer({
   onOpenChange,
   datas,
 }: DataTableDrawerProps) {
-  const [files, setFiles] = useState<File[]>([])
-  const { getInputProps } = useDropzone({
-    onDrop: (acceptedFiles: File[]) => setFiles(acceptedFiles as File[]),
-  })
-  const [showExtracted, setShowExtracted] = useState(false)
   const [loading, setLoading] = useState(false)
   const [category, setCategory] = useState("")
   const [subcategory, setSubcategory] = useState("")
@@ -162,102 +154,6 @@ export function DataTableDrawer({
   const status = invoice_statuses.find(
     (item) => item.value === datas?.status,
   )
-
-  const filesList = files.map((file) => (
-    <li
-      key={file.name}
-      className="relative rounded-lg border border-gray-300 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-[#090E1A]"
-    >
-      <div className="absolute right-4 top-1/2 -translate-y-1/2">
-        <button
-          type="button"
-          className="rounded-md p-2 text-gray-400 transition-all hover:text-rose-500 dark:text-gray-600 hover:dark:text-rose-500"
-          aria-label="Remove file"
-          onClick={() =>
-            setFiles((prevFiles) =>
-              prevFiles.filter((prevFile) => prevFile.name !== file.name),
-            )
-          }
-        >
-          <Trash2 className="size-5 shrink-0" aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          className="rounded-md p-2 text-gray-400 transition-all hover:text-gray-500 dark:text-gray-600 hover:dark:text-gray-500"
-          aria-label="Download file"
-        >
-          <Download className="size-5 shrink-0" aria-hidden="true" />
-        </button>
-      </div>
-      <div className="flex items-center space-x-3 truncate">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-gray-100 dark:bg-gray-800">
-          <File
-            className="size-5 text-gray-700 dark:text-gray-300"
-            aria-hidden={true}
-          />
-        </span>
-        <div className="truncate pr-20">
-          <p className="truncate text-xs font-medium text-gray-900 hover:underline hover:underline-offset-4 dark:text-gray-50">
-            <a href="#">{file.name}</a>
-          </p>
-          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-500">
-            {file.size} bytes
-          </p>
-        </div>
-      </div>
-    </li>
-  ))
-
-  async function handleStatusChange(status: string) {
-    if (!datas) return
-    setLoading(true)
-    const oldStatus = datas.status
-    await supabase
-      .from("invoice_class_invoices")
-      .update({ status })
-      .eq("id", datas.id)
-    // Add audit trail entry
-    await supabase
-      .from("invoice_class_invoice_audit_trail")
-      .insert({
-        invoice_id: datas.id,
-        action: "status_updated",
-        performed_by: "ui_user", // Replace with real user if available
-        details: {
-          before: { status: oldStatus },
-          after: { status },
-        },
-      })
-    // If status is approved, send to Zapier
-    if (status === "approved") {
-      try {
-        await axios.post(
-          "/api/send-to-zapier",
-          {
-            vendor_name: datas.vendor_name,
-            amount: datas.amount,
-            invoice_date: datas.invoice_date,
-            due_date: datas.due_date || null,
-            payment_method: datas.payment_method || "",
-            branch: datas.branch || "",
-            gl_account: datas.gl_account || "",
-            category: datas.category || "",
-            subcategory: datas.subcategory || "",
-            description: datas.description || "",
-            pdf_url: datas.pdf_url || "",
-            is_paid: datas.is_paid || false,
-          },
-          { headers: { "Content-Type": "application/json" } }
-        )
-        console.log("✅ Sent invoice to Zapier for payment processing.")
-      } catch (err) {
-        console.error("❌ Failed to send invoice to Zapier:", err)
-      }
-    }
-    setLoading(false)
-    onOpenChange(false)
-    // Optionally: trigger a refresh in parent (can use a callback prop or context)
-  }
 
   async function handleSave() {
     if (!datas) return

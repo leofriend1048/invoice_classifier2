@@ -14,13 +14,6 @@ import {
 import { Input } from "@/components/Input"
 import { Label } from "@/components/Label"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/Select"
-import {
   Table,
   TableBody,
   TableCell,
@@ -29,66 +22,14 @@ import {
   TableRoot,
   TableRow,
 } from "@/components/Table"
-import { departments } from "@/data/data"
+import { authClient } from "@/lib/auth-client"
+import { createClient } from '@supabase/supabase-js'
 import { Plus, Trash2 } from "lucide-react"
 import { useEffect, useState } from 'react'
 
-const users = [
-  {
-    initials: "AC",
-    name: "Adam Clarke",
-    email: "a.clarke@acme.com",
-    dateAdded: "Jan 13, 2022",
-    lastActive: "Mar 2, 2024",
-    permission: "All areas",
-    status: "active",
-  },
-  {
-    initials: "LB",
-    name: "Lisa Brown",
-    email: "l.brown@acme.com",
-    dateAdded: "Feb 12, 2022",
-    lastActive: "Jun 2, 2024",
-    permission: "Sales",
-    status: "active",
-  },
-  {
-    initials: "DW",
-    name: "David Wilson",
-    email: "d.wilson@acme.com",
-    dateAdded: "Sep 19, 2023",
-    lastActive: "Jul 10, 2024",
-    permission: "Marketing",
-    status: "active",
-  },
-  {
-    initials: "KT",
-    name: "Karen Thompson",
-    email: "k.thompson@acme.com",
-    dateAdded: "Jan 21, 2024",
-    lastActive: "Feb 8, 2024",
-    permission: "Sales",
-    status: "active",
-  },
-  {
-    initials: "NP",
-    name: "Nathan Parker",
-    email: "n.parker@acme.com",
-    dateAdded: "Apr 18, 2023",
-    lastActive: "Dec 20, 2023",
-    permission: "IT",
-    status: "active",
-  },
-  {
-    initials: "SG",
-    name: "Sarah Green",
-    email: "s.green@acme.com",
-    dateAdded: "Jul 14. 2024",
-    lastActive: "--",
-    permission: "",
-    status: "pending",
-  },
-]
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string
+const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 export default function Users() {
   // Google Connect State
@@ -96,9 +37,8 @@ export default function Users() {
   const [googleStatus, setGoogleStatus] = useState<'connected' | 'not_connected' | 'loading'>('not_connected');
   const [showSuccess, setShowSuccess] = useState(false);
   const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-  const router = typeof window !== 'undefined' ? window : null;
 
-  // On mount, load last used email from localStorage and check status
+  // On mount, load last used email from localStorage and check status ONCE
   useEffect(() => {
     const lastEmail = typeof window !== 'undefined' ? localStorage.getItem('googleEmail') : '';
     if (lastEmail) {
@@ -113,7 +53,7 @@ export default function Users() {
       url.searchParams.delete('google_connected');
       window.history.replaceState({}, '', url.pathname + url.search);
     }
-  }, []);
+  }, []); // Only run on mount
 
   // Check connection status (call API)
   async function checkGoogleStatus(email: string) {
@@ -155,6 +95,106 @@ export default function Users() {
     } else {
       setGoogleStatus('not_connected');
     }
+  }
+
+  const [users, setUsers] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [addDialogOpen, setAddDialogOpen] = useState(false)
+  const [newUserEmail, setNewUserEmail] = useState('')
+  const [newUserFirstName, setNewUserFirstName] = useState('')
+  const [newUserLastName, setNewUserLastName] = useState('')
+  const [addError, setAddError] = useState<string | null>(null)
+  const [addLoading, setAddLoading] = useState(false)
+  const [addSuccess, setAddSuccess] = useState<string | null>(null)
+  const [deleteUserId, setDeleteUserId] = useState<string | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
+
+  // Load users from Supabase
+  useEffect(() => {
+    async function fetchUsers() {
+      setLoading(true)
+      const { data } = await supabase.from('user').select('id, name, email, "createdAt"')
+      setUsers(data || [])
+      setLoading(false)
+    }
+    fetchUsers()
+  }, [])
+
+  // Add user handler
+  async function handleAddUser(e: React.FormEvent) {
+    e.preventDefault();
+    setAddLoading(true);
+    setAddError(null);
+    setAddSuccess(null);
+    try {
+      // Create the user with admin invitation flag
+      const userResult = await authClient.admin.createUser(
+        {
+          email: newUserEmail,
+          name: `${newUserFirstName} ${newUserLastName}`.trim(),
+          password: Math.random().toString(36).slice(-12),
+          data: { 
+            callbackURL: "/login",
+            isAdminInvited: true // Flag to skip verification email
+          },
+        }
+      );
+      
+      // Manually set emailVerified=true for admin-invited users
+      if (userResult.data?.user?.id) {
+        console.log('Setting emailVerified=true for admin-invited user:', userResult.data.user.id);
+        const { error: updateError } = await supabase
+          .from('user')
+          .update({ emailVerified: true })
+          .eq('id', userResult.data.user.id);
+        
+        if (updateError) {
+          console.error('Failed to set emailVerified=true:', updateError);
+        } else {
+          console.log('Successfully set emailVerified=true for user:', userResult.data.user.id);
+        }
+      }
+      
+      // Send password reset email with token using Better Auth
+      await authClient.forgetPassword({
+        email: newUserEmail,
+        redirectTo: `${process.env.NEXT_PUBLIC_BASE_URL}/reset-password`,
+      });
+      
+      setAddDialogOpen(false);
+      setNewUserEmail('');
+      setNewUserFirstName('');
+      setNewUserLastName('');
+      setAddSuccess('User invited! They will receive an email to set their password.');
+      
+      // Refresh users
+      const { data: usersData } = await supabase.from('user').select('id, name, email, "createdAt"');
+      setUsers(usersData || []);
+    } catch (err: any) {
+      setAddError(err.message || 'Failed to invite user');
+    }
+    setAddLoading(false);
+  }
+
+  // Delete user handler
+  async function handleDeleteUser(id: string) {
+    setDeleteLoading(true);
+    try {
+      const res = await fetch('/api/admin/delete-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      const result = await res.json();
+      if (!result.success) throw new Error(result.error || 'Failed to delete user');
+      setDeleteUserId(null);
+      // Refresh users
+      const { data } = await supabase.from('user').select('id, name, email, "createdAt"');
+      setUsers(data || []);
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete user');
+    }
+    setDeleteLoading(false);
   }
 
   return (
@@ -217,250 +257,131 @@ export default function Users() {
           Check Connection
         </Button>
       </div>
-      <form>
-        <div className="grid grid-cols-1 gap-x-8 gap-y-8 md:grid-cols-3">
-          <div>
-            <h2
-              id="members-heading"
-              className="scroll-mt-10 font-semibold text-gray-900 dark:text-gray-50"
-            >
-              Members
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-gray-500">
-              Invite employees to Insights and manage their permissions to
-              streamline expense management.
-            </p>
-          </div>
-          <div className="md:col-span-2">
-            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-              <h3
-                id="users-list-heading"
-                className="text-sm font-medium text-gray-900 dark:text-gray-50"
-              >
-                Users with approval rights
-              </h3>
-              <div className="flex items-center gap-4">
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button className="w-full gap-2 sm:w-fit">
-                      <Plus
-                        className="-ml-1 size-4 shrink-0"
-                        aria-hidden="true"
-                      />
-                      Add user
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="sm:max-w-lg">
-                    <DialogHeader>
-                      <DialogTitle>Add New User</DialogTitle>
-                      <DialogDescription className="mt-1 text-sm leading-6">
-                        Fill in the details below to add a new user.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <form className="mt-4 space-y-4">
-                      <div>
-                        <Label htmlFor="new-user-email" className="font-medium">
-                          Email
-                        </Label>
-                        <Input
-                          id="new-user-email"
-                          type="email"
-                          name="email"
-                          className="mt-2"
-                          placeholder="Email"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <Label
-                          htmlFor="new-user-permission"
-                          className="font-medium"
-                        >
-                          Permission
-                        </Label>
-                        <Select name="permission" defaultValue="">
-                          <SelectTrigger
-                            id="new-user-permission"
-                            className="mt-2 w-full"
-                          >
-                            <SelectValue placeholder="Select Permission" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {departments.map((item) => (
-                              <SelectItem key={item.value} value={item.label}>
-                                {item.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <DialogFooter className="mt-6">
-                        <DialogClose asChild>
-                          <Button
-                            className="mt-2 w-full sm:mt-0 sm:w-fit"
-                            variant="secondary"
-                          >
-                            Cancel
-                          </Button>
-                        </DialogClose>
-                        <Button
-                          className="w-full sm:w-fit"
-                          variant="primary"
-                          type="submit"
-                        >
-                          Add User
-                        </Button>
-                      </DialogFooter>
-                    </form>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            </div>
-            <TableRoot className="mt-6" aria-labelledby="users-list-heading">
-              <Table className="border-transparent dark:border-transparent">
-                <TableHead>
-                  <TableRow>
-                    <TableHeaderCell className="w-full text-xs font-medium uppercase">
-                      Name / Email
-                    </TableHeaderCell>
-                    <TableHeaderCell className="text-xs font-medium uppercase">
-                      Date added
-                    </TableHeaderCell>
-                    <TableHeaderCell className="text-xs font-medium uppercase">
-                      Last active
-                    </TableHeaderCell>
-                    <TableHeaderCell className="text-xs font-medium uppercase">
-                      Permission
-                    </TableHeaderCell>
-                    <TableHeaderCell className="text-xs font-medium uppercase">
-                      <span className="sr-only">Actions</span>
-                    </TableHeaderCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {users.map((item) => (
-                    <TableRow key={item.name}>
-                      <TableCell className="w-full">
-                        {item.status === "pending" ? (
-                          <div className="flex items-center gap-4">
-                            <span
-                              className="inline-flex size-9 items-center justify-center rounded-full border border-dashed border-gray-300 p-1.5 text-xs font-medium text-gray-700 dark:border-gray-700 dark:text-gray-50"
-                              aria-hidden="true"
-                            >
-                              {item.initials}
-                            </span>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <div className="text-sm font-medium text-gray-900 dark:text-gray-50">
-                                  {item.name}
-                                </div>
-                                <span className="rounded-md bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-400/10 dark:text-gray-300">
-                                  pending
-                                </span>
-                              </div>
-                              <div className="text-xs text-gray-500 dark:text-gray-500">
-                                {item.email}
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-4">
-                            <span
-                              className="inline-flex size-9 items-center justify-center rounded-full bg-gray-50 p-1.5 text-xs font-medium text-gray-700 ring-1 ring-gray-300 dark:bg-gray-800 dark:text-gray-50 dark:ring-gray-700"
-                              aria-hidden="true"
-                            >
-                              {item.initials}
-                            </span>
-                            <div>
-                              <div className="text-sm font-medium text-gray-900 dark:text-gray-50">
-                                {item.name}
-                              </div>
-                              <div className="text-xs text-gray-500 dark:text-gray-500">
-                                {item.email}
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell>{item.dateAdded}</TableCell>
-                      <TableCell>{item.lastActive}</TableCell>
-                      <TableCell>
-                        {item.status === "pending" ? (
-                          <Button
-                            variant="secondary"
-                            className="justify-center sm:w-36 dark:border dark:border-gray-800 dark:bg-[#090E1A] hover:dark:bg-gray-950/50"
-                          >
-                            Resend
-                          </Button>
-                        ) : (
-                          <Select defaultValue={item.permission}>
-                            <SelectTrigger
-                              className="sm:w-36"
-                              aria-label={`Change permission for ${item.name}`}
-                            >
-                              <SelectValue placeholder="Select" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {departments.map((dept) => (
-                                <SelectItem key={dept.value} value={dept.label}>
-                                  {dept.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              className="p-2.5 text-gray-600 transition-all hover:border hover:border-gray-300 hover:bg-gray-50 hover:text-red-500 dark:text-gray-400 hover:dark:border-gray-800 hover:dark:bg-gray-900 hover:dark:text-red-500"
-                              aria-label={`Delete ${item.name}`}
-                            >
-                              <Trash2
-                                className="size-4 shrink-0"
-                                aria-hidden="true"
-                              />
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent className="sm:max-w-lg">
-                            <DialogHeader>
-                              <DialogTitle>Please confirm</DialogTitle>
-                              <DialogDescription className="mt-1 text-sm leading-6">
-                                Are you sure you want to delete {item.name}?
-                                This action cannot be undone.
-                              </DialogDescription>
-                            </DialogHeader>
-                            <DialogFooter className="mt-6">
-                              <DialogClose asChild>
-                                <Button
-                                  className="mt-2 w-full sm:mt-0 sm:w-fit"
-                                  variant="secondary"
-                                >
-                                  Cancel
-                                </Button>
-                              </DialogClose>
-                              <DialogClose asChild>
-                                <Button
-                                  className="w-full sm:w-fit"
-                                  variant="destructive"
-                                >
-                                  Delete
-                                </Button>
-                              </DialogClose>
-                            </DialogFooter>
-                          </DialogContent>
-                        </Dialog>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableRoot>
-          </div>
+      <div className="grid grid-cols-1 gap-x-8 gap-y-8 md:grid-cols-3">
+        <div>
+          <h2
+            id="members-heading"
+            className="scroll-mt-10 font-semibold text-gray-900 dark:text-gray-50"
+          >
+            Members
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-gray-500">
+            Invite employees to Insights and manage their permissions to
+            streamline expense management.
+          </p>
         </div>
-      </form>
+        <div className="md:col-span-2">
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+            <h3
+              id="users-list-heading"
+              className="text-sm font-medium text-gray-900 dark:text-gray-50"
+            >
+              Users with approval rights
+            </h3>
+            <div className="flex items-center gap-4">
+              <Button onClick={() => setAddDialogOpen(true)} className="w-full gap-2 sm:w-fit">
+                <Plus className="-ml-1 size-4 shrink-0" aria-hidden="true" />
+                Add user
+              </Button>
+            </div>
+          </div>
+          <TableRoot className="mt-6" aria-labelledby="users-list-heading">
+            <Table className="border-transparent dark:border-transparent">
+              <TableHead>
+                <TableRow>
+                  <TableHeaderCell className="w-full text-xs font-medium uppercase">Name / Email</TableHeaderCell>
+                  <TableHeaderCell className="text-xs font-medium uppercase">Date added</TableHeaderCell>
+                  <TableHeaderCell className="text-xs font-medium uppercase"><span className="sr-only">Actions</span></TableHeaderCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {loading ? (
+                  <TableRow><TableCell colSpan={3}>Loading...</TableCell></TableRow>
+                ) : users.length === 0 ? (
+                  <TableRow><TableCell colSpan={3}>No users found.</TableCell></TableRow>
+                ) : users.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell className="w-full">
+                      <div className="flex items-center gap-4">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900 dark:text-gray-50">{user.name || user.email}</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-500">{user.email}</div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : ''}</TableCell>
+                    <TableCell>
+                      <Dialog open={deleteUserId === user.id} onOpenChange={open => setDeleteUserId(open ? user.id : null)}>
+                        <DialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            className="p-2.5 text-gray-600 transition-all hover:border hover:border-gray-300 hover:bg-gray-50 hover:text-red-500 dark:text-gray-400 hover:dark:border-gray-800 hover:dark:bg-gray-900 hover:dark:text-red-500"
+                            aria-label={`Delete ${user.name || user.email}`}
+                          >
+                            <Trash2 className="size-4 shrink-0" aria-hidden="true" />
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-lg">
+                          <DialogHeader>
+                            <DialogTitle>Please confirm</DialogTitle>
+                            <DialogDescription className="mt-1 text-sm leading-6">
+                              Are you sure you want to delete {user.name || user.email}? This action cannot be undone.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <DialogFooter className="mt-6">
+                            <DialogClose asChild>
+                              <Button className="mt-2 w-full sm:mt-0 sm:w-fit" variant="secondary">Cancel</Button>
+                            </DialogClose>
+                            <Button className="w-full sm:w-fit" variant="destructive" onClick={() => handleDeleteUser(user.id)} disabled={deleteLoading}>
+                              {deleteLoading ? 'Deleting...' : 'Delete'}
+                            </Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableRoot>
+        </div>
+      </div>
+      {/* Add User Dialog */}
+      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add New User</DialogTitle>
+            <DialogDescription className="mt-1 text-sm leading-6">Fill in the details below to invite a new user.</DialogDescription>
+          </DialogHeader>
+          <form className="mt-4 space-y-4" onSubmit={handleAddUser}>
+            <div>
+              <Label htmlFor="new-user-first-name" className="font-medium">First Name</Label>
+              <Input id="new-user-first-name" type="text" name="first-name" className="mt-2" placeholder="First Name" value={newUserFirstName} onChange={e => setNewUserFirstName(e.target.value)} required />
+            </div>
+            <div>
+              <Label htmlFor="new-user-last-name" className="font-medium">Last Name</Label>
+              <Input id="new-user-last-name" type="text" name="last-name" className="mt-2" placeholder="Last Name" value={newUserLastName} onChange={e => setNewUserLastName(e.target.value)} required />
+            </div>
+            <div>
+              <Label htmlFor="new-user-email" className="font-medium">Email</Label>
+              <Input id="new-user-email" type="email" name="email" className="mt-2" placeholder="Email" value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} required />
+            </div>
+            {addError && <div className="text-sm text-red-600 dark:text-red-400">{addError}</div>}
+            <DialogFooter className="mt-6">
+              <DialogClose asChild>
+                <Button className="mt-2 w-full sm:mt-0 sm:w-fit" variant="secondary" type="button">Cancel</Button>
+              </DialogClose>
+              <Button className="w-full sm:w-fit" variant="primary" type="submit" disabled={addLoading}>{addLoading ? 'Inviting...' : 'Invite User'}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      {addSuccess && (
+        <div className="mb-4 rounded bg-green-100 p-4 text-green-800 flex items-center justify-between">
+          <span>{addSuccess}</span>
+          <button onClick={() => setAddSuccess(null)} className="ml-4 text-green-900 font-bold">×</button>
+        </div>
+      )}
     </section>
   )
 }

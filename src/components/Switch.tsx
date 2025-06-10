@@ -48,6 +48,7 @@ const switchVariants = tv({
         root: "h-5 w-9",
         thumb:
           "h-4 w-4 data-[state=checked]:translate-x-4 data-[state=unchecked]:translate-x-0",
+          
       },
       small: {
         root: "h-4 w-7",

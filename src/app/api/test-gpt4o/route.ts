@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { extractInvoiceDataWithGPT4o } from '@/lib/openai';
 import { supabaseServer } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';

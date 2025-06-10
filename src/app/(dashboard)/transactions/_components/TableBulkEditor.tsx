@@ -32,7 +32,6 @@ function DataTableBulkEditor({
 }) {
   const hasSelectedRows = Object.keys(rowSelection).length > 0
   const [loading, setLoading] = useState(false)
-  const [showCategoryModal, setShowCategoryModal] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [showEditDrawer, setShowEditDrawer] = useState(false)
   const selectedRows = table.getSelectedRowModel().rows.map(row => row.original)
@@ -48,7 +47,7 @@ function DataTableBulkEditor({
     due_date: "",
   })
 
-  function openBulkEditDrawer(focusField?: keyof typeof editValues) {
+  function openBulkEditDrawer() {
     // If all selected have the same value, prefill, else blank
     const first = selectedRows[0]
     setEditValues({

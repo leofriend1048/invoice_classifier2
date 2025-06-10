@@ -1,6 +1,8 @@
 import { supabaseServer } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     console.log('🔍 Analyzing current PDF URLs in database...');

@@ -66,10 +66,8 @@ export async function classifyInvoice(
       .select('category, subcategory, status, vendor_name')
       .neq('status', 'pending');
     let uniqueCategories: string[] = [];
-    let uniqueSubcategories: string[] = [];
     if (!catError && catData) {
       uniqueCategories = Array.from(new Set(catData.map((row: any) => row.category).filter(Boolean)));
-      uniqueSubcategories = Array.from(new Set(catData.map((row: any) => row.subcategory).filter(Boolean)));
     }
 
     // Step 1: Vendor-level learning: check for previous non-pending invoices for this vendor
@@ -82,7 +80,6 @@ export async function classifyInvoice(
         amount,
         extractedText,
         uniqueCategories,
-        uniqueSubcategories,
         lastVendorInvoice.category,
         lastVendorInvoice.subcategory,
         true // description only
@@ -110,13 +107,29 @@ export async function classifyInvoice(
       vendorName,
       amount,
       extractedText,
-      uniqueCategories,
-      uniqueSubcategories
+      uniqueCategories
     );
     
     // Step 4: Apply hybrid logic
     console.log('🔀 Applying hybrid classification logic...');
-    const hybridResult = await applyHybridLogic(patternResult, gptResult, vendorName);
+    // Patch: ensure all required fields are strings, not null
+    const safePatternResult = patternResult
+      ? {
+          ...patternResult,
+          category: patternResult.category ?? '',
+          subcategory: patternResult.subcategory ?? '',
+          description: patternResult.description ?? '',
+        }
+      : null;
+    const safeGptResult = gptResult
+      ? {
+          ...gptResult,
+          category: gptResult.category ?? '',
+          subcategory: gptResult.subcategory ?? '',
+          description: gptResult.description ?? '',
+        }
+      : null;
+    const hybridResult = await applyHybridLogic(safePatternResult, safeGptResult, vendorName);
     
     console.log('✅ Classification completed:', hybridResult);
     return hybridResult;
@@ -422,7 +435,6 @@ async function getVendorProfile(vendorName: string): Promise<VendorProfile | nul
 export async function updateVendorProfile(
   vendorName: string,
   category: string,
-  subcategory: string,
   amount: number
 ): Promise<void> {
   try {

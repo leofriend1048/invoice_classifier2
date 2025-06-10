@@ -94,17 +94,9 @@ export default function Example() {
           <DataTable
             data={invoices}
             columns={columns}
-            onRowClick={(row) => {
-              setRow(row)
-              setIsOpen(true)
-            }}
-            onEditClick={(row) => {
-              setRow(row)
-              setIsOpen(true)
-            }}
+            onTableReady={setTableInstance}
             rowSelection={rowSelection}
             setRowSelection={setRowSelection}
-            onTableReady={setTableInstance}
           />
         )}
         <DataTableDrawer open={isOpen} onOpenChange={setIsOpen} datas={datas} />

@@ -13,9 +13,11 @@ import {
   DropdownMenuSubMenu,
   DropdownMenuSubMenuContent,
   DropdownMenuSubMenuTrigger,
-  DropdownMenuTrigger,
+  DropdownMenuTrigger
 } from "@/components/DropdownMenu"
-import { ArrowUpRight, Monitor, Moon, Sun } from "lucide-react"
+import { useSession } from "@/lib/auth-client"
+import { useStore } from "@nanostores/react"
+import { Monitor, Moon, Sun } from "lucide-react"
 import { useTheme } from "next-themes"
 import * as React from "react"
 
@@ -30,6 +32,8 @@ export function DropdownUserProfile({
 }: DropdownUserProfileProps) {
   const [mounted, setMounted] = React.useState(false)
   const { theme, setTheme } = useTheme()
+  const session = useStore(useSession)
+  const user = session?.data?.user
   React.useEffect(() => {
     setMounted(true)
   }, [])
@@ -37,6 +41,21 @@ export function DropdownUserProfile({
   if (!mounted) {
     return null
   }
+
+  // Compute initials from user name if needed
+  let initials = "";
+  if (user?.name) {
+    const parts = user.name.trim().split(" ");
+    if (parts.length >= 2) {
+      initials = `${parts[0][0] || ""}${parts[1][0] || ""}`.toUpperCase();
+    } else if (parts.length === 1) {
+      initials = parts[0].slice(0, 2).toUpperCase();
+    }
+  } else if (user?.email) {
+    initials = user.email.slice(0, 2).toUpperCase();
+  }
+  if (!initials) initials = "?";
+
   return (
     <>
       <DropdownMenu>
@@ -45,7 +64,7 @@ export function DropdownUserProfile({
           align={align}
           className="!min-w-[calc(var(--radix-dropdown-menu-trigger-width))]"
         >
-          <DropdownMenuLabel>leo@michaeltoddbeauty.com</DropdownMenuLabel>
+          <DropdownMenuLabel>{user?.email || ""}</DropdownMenuLabel>
           <DropdownMenuGroup>
             <DropdownMenuSubMenu>
               <DropdownMenuSubMenuTrigger>Theme</DropdownMenuSubMenuTrigger>
@@ -83,30 +102,6 @@ export function DropdownUserProfile({
                 </DropdownMenuRadioGroup>
               </DropdownMenuSubMenuContent>
             </DropdownMenuSubMenu>
-          </DropdownMenuGroup>
-          <DropdownMenuSeparator />
-          <DropdownMenuGroup>
-            <DropdownMenuItem>
-              Changelog
-              <ArrowUpRight
-                className="mb-1 ml-1 size-3 shrink-0 text-gray-500 dark:text-gray-500"
-                aria-hidden="true"
-              />
-            </DropdownMenuItem>
-            <DropdownMenuItem>
-              Documentation
-              <ArrowUpRight
-                className="mb-1 ml-1 size-3 shrink-0 text-gray-500"
-                aria-hidden="true"
-              />
-            </DropdownMenuItem>
-            <DropdownMenuItem>
-              Join Slack community
-              <ArrowUpRight
-                className="mb-1 ml-1 size-3 shrink-0 text-gray-500"
-                aria-hidden="true"
-              />
-            </DropdownMenuItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>

@@ -97,7 +97,6 @@ export async function GET() {
     await updateVendorProfile(
       invoice.vendor_name,
       classification.category,
-      classification.subcategory,
       invoice.amount || 0
     );
 

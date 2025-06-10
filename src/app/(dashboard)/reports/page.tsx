@@ -12,12 +12,10 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 export default function Page() {
   const [invoices, setInvoices] = useState<Invoice[]>([])
-  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let ignore = false
     async function fetchInvoices() {
-      setLoading(true)
       const { data, error } = await supabase
         .from("invoice_class_invoices")
         .select("*")
@@ -26,7 +24,6 @@ export default function Page() {
       if (!error && data && !ignore) {
         setInvoices(data as Invoice[])
       }
-      setLoading(false)
     }
     fetchInvoices()
     return () => { ignore = true }

@@ -76,7 +76,7 @@ export function DataTableDrawerFeed({ invoiceId }: { invoiceId: string }) {
         <Text>No audit trail entries for this invoice.</Text>
       ) : (
         <div className="flex flex-col gap-0.5 border-l-2 border-tremor-border dark:border-tremor-border-dark pl-4">
-          {auditTrail.map((entry, idx) => {
+          {auditTrail.map((entry) => {
             const details = typeof entry.details === 'string' ? (() => { try { return JSON.parse(entry.details) } catch { return {} } })() : entry.details || {}
             // Find changed fields for before/after
             let changedFields: Array<{ key: string, before: any, after: any }> = []

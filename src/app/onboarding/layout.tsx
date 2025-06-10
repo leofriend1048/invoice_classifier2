@@ -89,7 +89,7 @@ const onboardingSteps = [
         <li>Select multiple invoices for bulk actions: approve, edit, delete, or export.</li>
         <li>Every change is logged in a timeline for full transparency.</li>
         <li>Manage your list of categories, subcategories, and branches in Settings.</li>
-        <li>You're always in control—review, edit, and approve as needed. The more you use it, the smarter it gets!</li>
+        <li>You&apos;re always in control—review, edit, and approve as needed. The more you use it, the smarter it gets!</li>
       </ul>
     ),
   },
@@ -99,7 +99,7 @@ const OnboardingStepper = () => {
   const [step, setStep] = React.useState(0)
   const isLast = step === onboardingSteps.length - 1
   const isFirst = step === 0
-  const { title, illustration, content } = onboardingSteps[step]
+  const { title, content } = onboardingSteps[step]
 
   return (
     <div className="flex flex-col items-center space-y-6">
@@ -137,11 +137,7 @@ const OnboardingStepper = () => {
   )
 }
 
-const Layout = ({
-  children,
-}: Readonly<{
-  children: React.ReactNode
-}>) => {
+const Layout = () => {
   const scrolled = useScroll(15)
 
   return (
@@ -161,7 +157,7 @@ const Layout = ({
             aria-hidden="true"
           />
           <span className="mt-0.5 text-lg font-semibold text-gray-900 dark:text-gray-50">
-            Insights
+            Invoice Classifier
           </span>
         </div>
         <StepProgress steps={steps} />

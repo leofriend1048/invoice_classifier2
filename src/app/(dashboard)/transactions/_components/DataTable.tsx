@@ -18,14 +18,13 @@ import { Filterbar } from "./Filterbar"
 import {
   ColumnDef,
   OnChangeFn,
-  Row,
   RowSelectionState,
   flexRender,
   getCoreRowModel,
   getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
-  useReactTable,
+  useReactTable
 } from "@tanstack/react-table"
 
 import { Invoice } from "@/data/schema"
@@ -33,8 +32,6 @@ import { Invoice } from "@/data/schema"
 interface DataTableProps {
   columns: ColumnDef<Invoice>[]
   data: Invoice[]
-  onRowClick?: (row: Row<Invoice>) => void
-  onEditClick?: (row: Row<Invoice>) => void
   rowSelection?: RowSelectionState
   setRowSelection?: OnChangeFn<RowSelectionState>
   onTableReady?: (table: any) => void
@@ -46,7 +43,7 @@ export const DataTableSelectionContext = createContext<{
   lastClickedIndex: number | null
 } | null>(null)
 
-export function DataTable({ columns, data, onRowClick, onEditClick, rowSelection: externalRowSelection, setRowSelection: externalSetRowSelection, onTableReady }: DataTableProps) {
+export function DataTable({ columns, data, rowSelection: externalRowSelection, setRowSelection: externalSetRowSelection, onTableReady }: DataTableProps) {
   const pageSize = 20
   const [internalRowSelection, internalSetRowSelection] = React.useState<RowSelectionState>({})
   const rowSelection = externalRowSelection ?? internalRowSelection

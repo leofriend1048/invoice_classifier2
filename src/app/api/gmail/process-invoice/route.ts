@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
     let classificationSuggestion = null;
     if (extractedData.vendor_name && extractedData.amount && extractedData.extracted_text) {
       classificationSuggestion = await classifyInvoiceWithGPT4o(
-        extractedData.vendor_name,
+        vendorName,
         extractedData.amount,
         extractedData.extracted_text
       );

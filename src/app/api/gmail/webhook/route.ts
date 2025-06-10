@@ -1,10 +1,11 @@
+export const dynamic = "force-dynamic";
 import { classifyInvoice, updateVendorProfile } from '@/lib/classification';
 import {
-    downloadAttachment,
-    extractAttachmentsFromMessage,
-    getFreshGmailClient,
-    getMessage,
-    isInvoiceFile
+  downloadAttachment,
+  extractAttachmentsFromMessage,
+  getFreshGmailClient,
+  getMessage,
+  isInvoiceFile
 } from '@/lib/google/gmail';
 import { getStoredTokensForEmail } from '@/lib/google/token-storage';
 import { extractInvoiceDataWithGPT4o } from '@/lib/openai';
@@ -22,16 +23,6 @@ async function queueGmailEvent(email: string, historyId: number) {
     );
   if (error) console.error(`❌ Failed to queue Gmail event:`, error);
   else console.log(`📥 Queued Gmail event for email=${email}, historyId=${historyId}`);
-}
-
-// Mark a specific queued row as processed
-async function markEventProcessed(email: string, historyId: number) {
-  await supabaseServer
-    .from('gmail_event_queue')
-    .update({ processed: true })
-    .eq('email', email)
-    .eq('history_id', historyId);
-  console.log(`✅ Marked event as processed for email=${email}, historyId=${historyId}`);
 }
 
 export async function POST(req: NextRequest) {
@@ -153,7 +144,7 @@ export async function POST(req: NextRequest) {
     console.log('✅ Pub/Sub message ACK\'ed, starting background processing...');
     
     // Start background processing (don't await)
-    processGmailEventInBackground(userEmail, incomingHistoryId, tokens, tokenRow, lastHistoryId)
+    processGmailEventInBackground(userEmail, incomingHistoryId, tokens, lastHistoryId)
       .catch(error => {
         console.error('💥 Background processing error:', error);
       });
@@ -175,7 +166,6 @@ async function processGmailEventInBackground(
   userEmail: string,
   incomingHistoryId: number,
   tokens: any,
-  tokenRow: any,
   lastHistoryId: number
 ) {
   let succeeded = false;
@@ -495,7 +485,6 @@ async function processGmailEventInBackground(
             await updateVendorProfile(
               extractedData.vendor_name,
               classification.category,
-              classification.subcategory,
               extractedData.amount
             );
             console.log('✅ Vendor profile updated');

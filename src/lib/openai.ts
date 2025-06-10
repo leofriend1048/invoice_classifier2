@@ -203,7 +203,6 @@ export async function classifyInvoiceWithGPT4o(
   amount: number,
   extractedText: string,
   uniqueCategories?: string[],
-  uniqueSubcategories?: string[],
   vendorCategory?: string,
   vendorSubcategory?: string,
   descriptionOnly?: boolean

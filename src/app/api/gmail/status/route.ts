@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { getGmailClientForEmail } from '@/lib/google/gmail';
 import { getFreshTokensForEmail, validateTokenHealth } from '@/lib/google/token-storage';
 import { NextRequest, NextResponse } from 'next/server';

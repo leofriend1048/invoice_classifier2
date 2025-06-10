@@ -1,3 +1,4 @@
+import { SessionProvider } from "@/components/auth/SessionProvider"
 import { GeistSans } from "geist/font/sans"
 import type { Metadata } from "next"
 import { ThemeProvider } from "next-themes"
@@ -13,11 +14,11 @@ export const metadata: Metadata = {
   keywords: [],
   authors: [
     {
-      name: "yourname",
+      name: "Invoice Classifier",
       url: "",
     },
   ],
-  creator: "yourname",
+  creator: "Invoice Classifier",
   openGraph: {
     type: "website",
     locale: "en_US",
@@ -46,9 +47,11 @@ export default function RootLayout({
           disableTransitionOnChange
           attribute="class"
         >
-          <NuqsAdapter>
-            <div>{children}</div>
-          </NuqsAdapter>
+          <SessionProvider>
+            <NuqsAdapter>
+              <div>{children}</div>
+            </NuqsAdapter>
+          </SessionProvider>
         </ThemeProvider>
       </body>
     </html>
