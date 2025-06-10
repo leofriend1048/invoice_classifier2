@@ -2,11 +2,11 @@
 
 import { Button } from "@/components/Button"
 import {
-  CommandBar,
-  CommandBarBar,
-  CommandBarCommand,
-  CommandBarSeperator,
-  CommandBarValue,
+    CommandBar,
+    CommandBarBar,
+    CommandBarCommand,
+    CommandBarSeperator,
+    CommandBarValue,
 } from "@/components/CommandBar"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/Dialog"
 import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader, DrawerTitle } from "@/components/Drawer"
@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { categories, Invoice, invoice_statuses } from "@/data/schema"
 import { createClient } from "@supabase/supabase-js"
 import { RowSelectionState, Table } from "@tanstack/react-table"
-import axios from "axios"
+
 import React, { useState } from "react"
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string
@@ -92,9 +92,10 @@ function DataTableBulkEditor({
       if (status === "approved") {
         for (const invoice of selectedRows) {
           try {
-            await axios.post(
-              "/api/send-to-zapier",
-              {
+            await fetch("/api/send-to-zapier", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
                 vendor_name: invoice.vendor_name,
                 amount: invoice.amount,
                 invoice_date: invoice.invoice_date,
@@ -107,9 +108,8 @@ function DataTableBulkEditor({
                 description: invoice.description || "",
                 pdf_url: invoice.pdf_url || "",
                 is_paid: invoice.is_paid || false,
-              },
-              { headers: { "Content-Type": "application/json" } }
-            )
+              })
+            })
             console.log("✅ Sent invoice to Zapier for payment processing.")
           } catch (err) {
             console.error("❌ Failed to send invoice to Zapier:", err)

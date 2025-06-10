@@ -1,4 +1,3 @@
-import axios from 'axios'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(req: NextRequest) {
@@ -11,8 +10,10 @@ export async function POST(req: NextRequest) {
     }
 
     const zapierUrl = 'https://hooks.zapier.com/hooks/catch/10570360/2viegum/'
-    await axios.post(zapierUrl, body, {
-      headers: { 'Content-Type': 'application/json' }
+    await fetch(zapierUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
     })
     return NextResponse.json({ success: true })
   } catch (err) {
