@@ -20,6 +20,10 @@ export const auth = betterAuth({
   database: new Pool({
     connectionString: databaseUrl,
   }),
+  trustedOrigins: [
+    "http://localhost:3000",
+    process.env.NEXT_PUBLIC_BASE_URL || "https://invoice-classifier-bay.vercel.app"
+  ],
   emailVerification: {
     sendVerificationEmail: async ({ user, url }) => {
       // Skip verification email for admin-created users (they'll get password reset instead)
