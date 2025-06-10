@@ -41,20 +41,24 @@ function ResetPasswordForm() {
         token,
       });
       
-      // Auto-verify the user after successful password reset
-      if (result.data?.user?.id) {
+      if (result.error) {
+        setError(result.error.message || "Failed to reset password.");
+        return;
+      }
+      
+              // Auto-verify the user after successful password reset
+        // Since password reset was successful, we can auto-verify the user
         try {
           await fetch('/api/auth/reset-password-complete', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: result.data.user.id })
+            body: JSON.stringify({ email })
           });
           console.log('User auto-verified after password reset');
         } catch (verifyError) {
           console.error('Failed to auto-verify user:', verifyError);
           // Don't throw error here as password reset was successful
         }
-      }
       
       setSuccess("Your password has been reset. You can now log in.");
       setTimeout(() => router.push("/login"), 2000);

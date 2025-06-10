@@ -1,15 +1,15 @@
-import { autoVerifyUser } from '@/lib/auth';
+import { autoVerifyUserByEmail } from '@/lib/auth';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId } = await req.json();
+    const { email } = await req.json();
     
-    if (!userId) {
-      return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
+    if (!email) {
+      return NextResponse.json({ error: 'Email is required' }, { status: 400 });
     }
     
-    const success = await autoVerifyUser(userId);
+    const success = await autoVerifyUserByEmail(email);
     
     if (success) {
       return NextResponse.json({ success: true, message: 'User verified successfully' });

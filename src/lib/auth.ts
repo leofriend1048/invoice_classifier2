@@ -110,3 +110,21 @@ export async function autoVerifyUser(userId: string) {
     return false;
   }
 }
+
+// Helper function to auto-verify user by email after password reset
+export async function autoVerifyUserByEmail(email: string) {
+  console.log('[Better Auth] Auto-verifying user by email after password reset:', email);
+  try {
+    const { error } = await supabaseServer.from('user').update({ emailVerified: true }).eq('email', email);
+    if (error) {
+      console.error('[Better Auth] Failed to set emailVerified=true after password reset for user:', email, error);
+      return false;
+    } else {
+      console.log('[Better Auth] emailVerified set to true after password reset for user:', email);
+      return true;
+    }
+  } catch (err) {
+    console.error('[Better Auth] Exception in autoVerifyUserByEmail:', err);
+    return false;
+  }
+}

@@ -3,7 +3,7 @@
 import { useSession } from "@/lib/auth-client";
 import { useStore } from "@nanostores/react";
 import { Loader2 } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { ReactNode, useEffect } from "react";
 
 interface AuthWrapperProps {
@@ -21,7 +21,6 @@ export function AuthWrapper({
 }: AuthWrapperProps) {
   const session = useStore(useSession);
   const router = useRouter();
-  const searchParams = useSearchParams();
   
   const isLoading = session?.isPending;
   const error = session?.error;
