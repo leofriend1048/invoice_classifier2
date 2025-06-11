@@ -1,11 +1,22 @@
 import { supabaseServer } from '@/lib/supabase-server';
+import { joinUrl } from '@/lib/url-utils';
 import { google } from 'googleapis';
 
 export function getOAuth2Client() {
+  // Ensure redirect URI doesn't have double slashes
+  let redirectUri = process.env.GOOGLE_REDIRECT_URI;
+  if (redirectUri) {
+    // Handle cases where the environment variable might have trailing slashes
+    const parts = redirectUri.split('/api/');
+    if (parts.length === 2) {
+      redirectUri = joinUrl(parts[0], `/api/${parts[1]}`);
+    }
+  }
+  
   return new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI
+    redirectUri
   );
 }
 

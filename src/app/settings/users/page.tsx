@@ -23,6 +23,7 @@ import {
   TableRow,
 } from "@/components/Table"
 import { authClient } from "@/lib/auth-client"
+import { getFullUrl } from "@/lib/url-utils"
 import { createClient } from '@supabase/supabase-js'
 import { Plus, Trash2 } from "lucide-react"
 import { useEffect, useState } from 'react'
@@ -158,7 +159,7 @@ export default function Users() {
       // Send password reset email with token using Better Auth
       await authClient.forgetPassword({
         email: newUserEmail,
-        redirectTo: `${process.env.NEXT_PUBLIC_BASE_URL}/reset-password`,
+        redirectTo: getFullUrl('/reset-password'),
       });
       
       setAddDialogOpen(false);
