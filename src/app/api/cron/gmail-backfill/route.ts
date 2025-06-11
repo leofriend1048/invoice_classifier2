@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
 
     // Get the base URL for internal API calls
     const baseUrl = process.env.NODE_ENV === 'production' 
-      ? `https://${process.env.VERCEL_URL}` 
+      ? 'https://invoice-classifier-bay.vercel.app' 
       : 'http://localhost:3000';
 
     console.log(`📡 Making internal call to: ${baseUrl}/api/gmail/backfill`);
