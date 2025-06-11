@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            maxEmails: 100, // Process up to 100 emails per day
+            maxEmails: 1, // Process only 1 email per cron run to avoid timeouts
             skipProcessing: false // Include GPT-4o processing
           })
         });
