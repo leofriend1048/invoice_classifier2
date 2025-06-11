@@ -87,16 +87,34 @@ export async function POST(req: NextRequest) {
 
     // ─── Step A: Prevent overlapping Gmail calls ─────────────────────────────────
 
-    // A.1) If a worker is already in flight for this user, just exit (but mark pending if not already)
-    if (tokenRow.is_processing) {
-      if (!tokenRow.processing_pending) {
+    // A.1) Check for stale locks (older than 5 minutes) and reset them
+    if (tokenRow.is_processing && tokenRow.last_checked_at) {
+      const lockAge = now.getTime() - new Date(tokenRow.last_checked_at).getTime();
+      const staleLockThreshold = 5 * 60 * 1000; // 5 minutes in milliseconds
+      
+      if (lockAge > staleLockThreshold) {
+        console.log(`🔓 Detected stale lock (${Math.round(lockAge / 1000 / 60)} minutes old), resetting...`);
         await supabaseServer
           .from('google_tokens')
-          .update({ processing_pending: true })
+          .update({ 
+            is_processing: false, 
+            processing_pending: true,
+            cooldown_until: null 
+          })
           .eq('email', userEmail);
+        console.log('✅ Stale lock reset, will proceed with processing');
+        // Continue to process since we just reset the lock
+      } else {
+        // Lock is recent, respect it
+        if (!tokenRow.processing_pending) {
+          await supabaseServer
+            .from('google_tokens')
+            .update({ processing_pending: true })
+            .eq('email', userEmail);
+        }
+        console.log('⏭️ Another process is already handling', userEmail);
+        return NextResponse.json({ success: true });
       }
-      console.log('⏭️ Another process is already handling', userEmail);
-      return NextResponse.json({ success: true });
     }
 
     // ─── Step B: Check cooldown and minimum‐interval throttle ─────────────────────────

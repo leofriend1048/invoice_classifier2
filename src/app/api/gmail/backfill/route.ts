@@ -120,12 +120,19 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Process each unprocessed message
+    // Process each unprocessed message with timeout protection
     let processed = 0;
     let errors = 0;
     const results: any[] = [];
+    const startTime = Date.now();
+    const maxProcessingTime = 50000; // 50 seconds (leave 10s buffer for response)
 
     for (const messageRef of unprocessedMessages) {
+      // Check if we're approaching timeout
+      if (Date.now() - startTime > maxProcessingTime) {
+        console.log(`⏰ Approaching timeout, stopping after processing ${processed} messages`);
+        break;
+      }
       try {
         console.log(`\n🔍 Processing message ${messageRef.id} (${processed + 1}/${unprocessedMessages.length})`);
 
