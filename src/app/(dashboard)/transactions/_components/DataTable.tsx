@@ -60,6 +60,12 @@ export function DataTable({ columns, data, rowSelection: externalRowSelection, s
         pageIndex: 0,
         pageSize: pageSize,
       },
+      sorting: [
+        {
+          id: "status",
+          desc: false, // ascending order so "pending" comes before "approved" and "rejected"
+        },
+      ],
     },
     enableRowSelection: true,
     getFilteredRowModel: getFilteredRowModel(),

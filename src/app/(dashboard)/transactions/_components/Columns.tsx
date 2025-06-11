@@ -168,6 +168,17 @@ export const getColumns = ({
         <DataTableColumnHeader column={column} title="Status" />
       ),
       enableSorting: true,
+      sortingFn: (rowA, rowB) => {
+        const statusA = rowA.getValue("status") as string
+        const statusB = rowB.getValue("status") as string
+        
+        // Define sort order: pending first, then approved, then rejected
+        const statusOrder = { "pending": 0, "approved": 1, "rejected": 2 }
+        const orderA = statusOrder[statusA as keyof typeof statusOrder] ?? 999
+        const orderB = statusOrder[statusB as keyof typeof statusOrder] ?? 999
+        
+        return orderA - orderB
+      },
       meta: {
         className: "text-left",
         displayName: "Status",
