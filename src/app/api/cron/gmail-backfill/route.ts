@@ -9,10 +9,17 @@ export async function GET(request: NextRequest) {
     console.log('🕐 Cron job started: Gmail backfill');
     
     // Verify this is a legitimate cron request from Vercel
-    const authHeader = request.headers.get('authorization');
-    if (process.env.NODE_ENV === 'production' && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      console.log('❌ Unauthorized cron request');
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (process.env.NODE_ENV === 'production') {
+      const vercelCronHeader = request.headers.get('x-vercel-cron');
+      const userAgent = request.headers.get('user-agent');
+      
+      // Check for Vercel cron indicators
+      const isVercelCron = vercelCronHeader === '1' || userAgent?.includes('vercel-cron');
+      
+      if (!isVercelCron) {
+        console.log('❌ Unauthorized cron request', { vercelCronHeader, userAgent });
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
     }
 
     // Get the base URL for internal API calls
