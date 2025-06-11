@@ -158,50 +158,140 @@ export function DataTableDrawer({
   async function handleSave() {
     if (!datas) return
     setLoading(true)
-    const oldVals = {
-      category: datas.category,
-      subcategory: datas.subcategory,
-      description: datas.description,
-      vendor_name: datas.vendor_name,
-      invoice_date: datas.invoice_date,
-      due_date: datas.due_date,
-      amount: datas.amount,
-      gl_account: datas.gl_account,
-      branch: datas.branch,
-      division: datas.division,
-      payment_method: datas.payment_method,
+    
+    try {
+      const oldVals = {
+        category: datas.category,
+        subcategory: datas.subcategory,
+        description: datas.description,
+        vendor_name: datas.vendor_name,
+        invoice_date: datas.invoice_date,
+        due_date: datas.due_date,
+        amount: datas.amount,
+        gl_account: datas.gl_account,
+        branch: datas.branch,
+        division: datas.division,
+        payment_method: datas.payment_method,
+      }
+      
+      // Prepare the update object with proper validation
+      const newVals: any = {}
+      
+      // Helper function to safely trim and validate strings
+      const safeString = (value: string | undefined | null) => {
+        if (!value) return null
+        const trimmed = value.trim()
+        return trimmed === "" ? null : trimmed
+      }
+      
+      // Required fields - only update if we have valid values
+      if (vendorName && safeString(vendorName)) {
+        newVals.vendor_name = safeString(vendorName)
+      }
+      
+      if (glAccount && safeString(glAccount)) {
+        newVals.gl_account = safeString(glAccount)
+      }
+      
+      if (branch && safeString(branch)) {
+        newVals.branch = safeString(branch)
+      }
+      
+      if (paymentMethod && safeString(paymentMethod)) {
+        newVals.payment_method = safeString(paymentMethod)
+      }
+      
+      // Division is required but has a default
+      if (division && safeString(division)) {
+        newVals.division = safeString(division)
+      }
+      
+      // Optional fields
+      if (category !== undefined && safeString(category)) {
+        newVals.category = safeString(category)
+      }
+      
+      if (subcategory !== undefined && safeString(subcategory)) {
+        newVals.subcategory = safeString(subcategory)
+      }
+      
+      if (description !== undefined) {
+        newVals.description = safeString(description)
+      }
+      
+      if (invoiceDate && invoiceDate.trim() !== "") {
+        // Convert YYYY-MM-DD to ISO string format
+        const date = new Date(invoiceDate.trim())
+        if (!isNaN(date.getTime())) {
+          newVals.invoice_date = date.toISOString().split('T')[0] // Keep just the date part
+        }
+      }
+      
+      if (dueDate && dueDate.trim() !== "") {
+        // Convert YYYY-MM-DD to ISO string format
+        const date = new Date(dueDate.trim())
+        if (!isNaN(date.getTime())) {
+          newVals.due_date = date.toISOString().split('T')[0] // Keep just the date part
+        }
+      }
+      
+      if (amount !== undefined && amount !== "") {
+        const parsedAmount = parseFloat(amount)
+        if (!isNaN(parsedAmount)) {
+          newVals.amount = parsedAmount
+        }
+      }
+      
+      console.log("Updating invoice with data:", newVals)
+      
+      // Check if we have any fields to update
+      if (Object.keys(newVals).length === 0) {
+        console.log("No fields to update, closing drawer")
+        setLoading(false)
+        onOpenChange(false)
+        return
+      }
+      
+      // Update the invoice
+      const { error: updateError } = await supabase
+        .from("invoice_class_invoices")
+        .update(newVals)
+        .eq("id", datas.id)
+      
+      if (updateError) {
+        console.error("Failed to update invoice:", updateError)
+        console.error("Update data that caused error:", newVals)
+        console.error("Full Supabase error:", updateError)
+        alert(`Failed to update invoice: ${updateError.message}\n\nPlease check the console for more details.`)
+        setLoading(false)
+        return
+      }
+      
+      // Add audit trail entry
+      const { error: auditError } = await supabase
+        .from("invoice_class_invoice_audit_trail")
+        .insert({
+          invoice_id: datas.id,
+          action: "field_edited",
+          performed_by: "ui_user", // Replace with real user if available
+          details: {
+            before: oldVals,
+            after: newVals,
+          },
+        })
+      
+      if (auditError) {
+        console.error("Failed to create audit trail:", auditError)
+        // Don't fail the save operation if audit trail fails
+      }
+      
+      setLoading(false)
+      onOpenChange(false)
+    } catch (error) {
+      console.error("Error saving invoice:", error)
+      alert("An error occurred while saving the invoice. Please try again.")
+      setLoading(false)
     }
-    const newVals = {
-      category,
-      subcategory,
-      description,
-      vendor_name: vendorName,
-      invoice_date: invoiceDate,
-      due_date: dueDate,
-      amount: amount ? parseFloat(amount) : null,
-      gl_account: glAccount,
-      branch,
-      division,
-      payment_method: paymentMethod,
-    }
-    await supabase
-      .from("invoice_class_invoices")
-      .update(newVals)
-      .eq("id", datas.id)
-    // Add audit trail entry
-    await supabase
-      .from("invoice_class_invoice_audit_trail")
-      .insert({
-        invoice_id: datas.id,
-        action: "field_edited",
-        performed_by: "ui_user", // Replace with real user if available
-        details: {
-          before: oldVals,
-          after: newVals,
-        },
-      })
-    setLoading(false)
-    onOpenChange(false)
   }
 
   return (
