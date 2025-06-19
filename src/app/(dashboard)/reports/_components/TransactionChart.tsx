@@ -31,45 +31,6 @@ interface ChartConfig {
   xValueFormatter?: (value: string) => string
 }
 
-// Chart skeleton component for when data is loading
-function ChartLoadingSkeleton({ layout = "horizontal" }: { layout?: "horizontal" | "vertical" }) {
-  return (
-    <div className="w-full">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex gap-2">
-          <div className="h-4 w-48 animate-pulse rounded bg-gray-200 dark:bg-gray-800" />
-          <div className="h-4 w-4 animate-pulse rounded bg-gray-200 dark:bg-gray-800" />
-        </div>
-      </div>
-      <div className="h-6 w-32 animate-pulse rounded bg-gray-200 dark:bg-gray-800 mb-6" />
-
-      {layout === "vertical" ? (
-        <div className="space-y-3">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="flex items-center space-x-3">
-              <div className="h-4 w-24 animate-pulse rounded bg-gray-200 dark:bg-gray-800" />
-              <div
-                className="h-4 animate-pulse rounded bg-gray-200 dark:bg-gray-800"
-                style={{ width: `${Math.random() * 200 + 50}px` }}
-              />
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="h-48 flex items-end space-x-2">
-          {Array.from({ length: 10 }).map((_, i) => (
-            <div
-              key={i}
-              className="bg-gray-200 dark:bg-gray-800 animate-pulse w-8 rounded-t"
-              style={{ height: `${Math.random() * 150 + 20}px` }}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
 const chartConfigs: Record<ChartType, ChartConfig> = {
   amount: {
     title: "Total Invoice Amount",
@@ -257,15 +218,7 @@ export function InvoiceChart({
     [chartData],
   )
 
-  // Show loading skeleton
-  if (isLoading) {
-    return (
-      <div className={cx(className, "w-full")}>
-        <ChartLoadingSkeleton layout={config.layout} />
-      </div>
-    )
-  }
-
+  // Charts are now handled by page-level loading, so we don't show individual skeletons
   return (
     <div className={cx(className, "w-full")}>
       <div className="flex items-center justify-between">
