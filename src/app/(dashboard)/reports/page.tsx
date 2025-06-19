@@ -2,7 +2,7 @@
 
 import { Invoice } from "@/data/schema"
 import { createClient } from "@supabase/supabase-js"
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import Header from "./_components/Header"
 import { InvoiceChart } from "./_components/TransactionChart"
 
@@ -13,21 +13,36 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey)
 export default function Page() {
   const [invoices, setInvoices] = useState<Invoice[]>([])
 
-  useEffect(() => {
-    let ignore = false
-    async function fetchInvoices() {
+  // Memoized fetch function to prevent recreating on every render
+  const fetchInvoices = useCallback(async () => {
+    try {
       const { data, error } = await supabase
         .from("invoice_class_invoices")
         .select("*")
         .eq("status", "approved")
         .order("invoice_date", { ascending: false })
-      if (!error && data && !ignore) {
+
+      if (!error && data) {
         setInvoices(data as Invoice[])
       }
+    } catch (err) {
+      console.error("Failed to fetch invoices:", err)
     }
-    fetchInvoices()
-    return () => { ignore = true }
   }, [])
+
+  useEffect(() => {
+    let ignore = false
+
+    const loadData = async () => {
+      await fetchInvoices()
+    }
+
+    if (!ignore) {
+      loadData()
+    }
+
+    return () => { ignore = true }
+  }, [fetchInvoices])
 
   return (
     <>
@@ -61,8 +76,16 @@ export default function Page() {
             invoices={invoices}
           />
           <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:gap-20">
-            <InvoiceChart yAxisWidth={100} type="category" invoices={invoices} />
-            <InvoiceChart yAxisWidth={100} type="merchant" invoices={invoices} />
+            <InvoiceChart
+              yAxisWidth={100}
+              type="category"
+              invoices={invoices}
+            />
+            <InvoiceChart
+              yAxisWidth={100}
+              type="merchant"
+              invoices={invoices}
+            />
           </div>
         </div>
       </section>

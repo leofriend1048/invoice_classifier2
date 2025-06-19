@@ -6,7 +6,7 @@ import { AvailableChartColorsKeys } from "@/lib/chartUtils"
 import { cx, formatters } from "@/lib/utils"
 import { InfoIcon } from "lucide-react"
 import { useQueryState } from "nuqs"
-import { useMemo } from "react"
+import { memo, useMemo } from "react"
 import { DEFAULT_RANGE, RANGE_DAYS, RangeKey } from "./dateRanges"
 
 interface ChartDataItem {
@@ -158,7 +158,7 @@ const isInvoiceValid = (
   )
 }
 
-export function InvoiceChart({
+function InvoiceChartComponent({
   type,
   yAxisWidth,
   showYAxis,
@@ -193,19 +193,26 @@ export function InvoiceChart({
     return [min, max === Infinity ? Number.MAX_SAFE_INTEGER : max]
   }, [amountRange])
 
-  const config = chartConfigs[type]
+  const config = useMemo(() => chartConfigs[type], [type])
 
+  // Optimized data processing with early returns for better performance
   const chartData = useMemo(() => {
+    if (!invoices?.length) return []
+
     const currentDate = new Date()
     const filterDate = new Date(currentDate)
     const daysToSubtract = RANGE_DAYS[range] || RANGE_DAYS[DEFAULT_RANGE]
     filterDate.setDate(currentDate.getDate() - daysToSubtract)
-    let filteredInvoices = expenseStatus === "all"
-      ? invoices
-      : invoices.filter(inv => inv.status === expenseStatus)
+
+    // Early filtering to reduce dataset size
+    let filteredInvoices = invoices
+    if (expenseStatus !== "all") {
+      filteredInvoices = filteredInvoices.filter(inv => inv.status === expenseStatus)
+    }
     if (branch !== "all") {
       filteredInvoices = filteredInvoices.filter(inv => inv.branch === branch)
     }
+
     return config.processData(filteredInvoices, filterDate, minAmount, maxAmount)
   }, [range, minAmount, maxAmount, config, invoices, expenseStatus, branch])
 
@@ -255,3 +262,6 @@ export function InvoiceChart({
     </div>
   )
 }
+
+// Memoized export for better performance - only re-renders when props actually change
+export const InvoiceChart = memo(InvoiceChartComponent)
