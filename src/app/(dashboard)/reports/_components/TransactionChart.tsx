@@ -31,6 +31,45 @@ interface ChartConfig {
   xValueFormatter?: (value: string) => string
 }
 
+// Chart skeleton component for when data is loading
+function ChartLoadingSkeleton({ layout = "horizontal" }: { layout?: "horizontal" | "vertical" }) {
+  return (
+    <div className="w-full">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex gap-2">
+          <div className="h-4 w-48 animate-pulse rounded bg-gray-200 dark:bg-gray-800" />
+          <div className="h-4 w-4 animate-pulse rounded bg-gray-200 dark:bg-gray-800" />
+        </div>
+      </div>
+      <div className="h-6 w-32 animate-pulse rounded bg-gray-200 dark:bg-gray-800 mb-6" />
+
+      {layout === "vertical" ? (
+        <div className="space-y-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex items-center space-x-3">
+              <div className="h-4 w-24 animate-pulse rounded bg-gray-200 dark:bg-gray-800" />
+              <div
+                className="h-4 animate-pulse rounded bg-gray-200 dark:bg-gray-800"
+                style={{ width: `${Math.random() * 200 + 50}px` }}
+              />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="h-48 flex items-end space-x-2">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <div
+              key={i}
+              className="bg-gray-200 dark:bg-gray-800 animate-pulse w-8 rounded-t"
+              style={{ height: `${Math.random() * 150 + 20}px` }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const chartConfigs: Record<ChartType, ChartConfig> = {
   amount: {
     title: "Total Invoice Amount",
@@ -164,12 +203,14 @@ export function InvoiceChart({
   showYAxis,
   className,
   invoices,
+  isLoading = false,
 }: {
   type: ChartType
   yAxisWidth?: number
   showYAxis?: boolean
   className?: string
   invoices: Invoice[]
+  isLoading?: boolean
 }) {
   const [range] = useQueryState<RangeKey>("range", {
     defaultValue: DEFAULT_RANGE,
@@ -196,6 +237,8 @@ export function InvoiceChart({
   const config = chartConfigs[type]
 
   const chartData = useMemo(() => {
+    if (isLoading || !invoices.length) return []
+
     const currentDate = new Date()
     const filterDate = new Date(currentDate)
     const daysToSubtract = RANGE_DAYS[range] || RANGE_DAYS[DEFAULT_RANGE]
@@ -207,12 +250,21 @@ export function InvoiceChart({
       filteredInvoices = filteredInvoices.filter(inv => inv.branch === branch)
     }
     return config.processData(filteredInvoices, filterDate, minAmount, maxAmount)
-  }, [range, minAmount, maxAmount, config, invoices, expenseStatus, branch])
+  }, [range, minAmount, maxAmount, config, invoices, expenseStatus, branch, isLoading])
 
   const totalValue = useMemo(
     () => Math.round(chartData.reduce((sum, item) => sum + item.value, 0)),
     [chartData],
   )
+
+  // Show loading skeleton
+  if (isLoading) {
+    return (
+      <div className={cx(className, "w-full")}>
+        <ChartLoadingSkeleton layout={config.layout} />
+      </div>
+    )
+  }
 
   return (
     <div className={cx(className, "w-full")}>

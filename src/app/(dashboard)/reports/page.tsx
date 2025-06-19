@@ -12,10 +12,12 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 export default function Page() {
   const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let ignore = false
     async function fetchInvoices() {
+      setLoading(true)
       const { data, error } = await supabase
         .from("invoice_class_invoices")
         .select("*")
@@ -24,6 +26,7 @@ export default function Page() {
       if (!error && data && !ignore) {
         setInvoices(data as Invoice[])
       }
+      setLoading(false)
     }
     fetchInvoices()
     return () => { ignore = true }
@@ -39,6 +42,7 @@ export default function Page() {
             type="amount"
             className="hidden sm:block"
             invoices={invoices}
+            isLoading={loading}
           />
           {/* optimized for mobile view */}
           <InvoiceChart
@@ -46,12 +50,14 @@ export default function Page() {
             type="amount"
             className="sm:hidden"
             invoices={invoices}
+            isLoading={loading}
           />
           <InvoiceChart
             yAxisWidth={70}
             type="count"
             className="hidden sm:block"
             invoices={invoices}
+            isLoading={loading}
           />
           {/* optimized for mobile view */}
           <InvoiceChart
@@ -59,10 +65,21 @@ export default function Page() {
             type="count"
             className="sm:hidden"
             invoices={invoices}
+            isLoading={loading}
           />
           <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:gap-20">
-            <InvoiceChart yAxisWidth={100} type="category" invoices={invoices} />
-            <InvoiceChart yAxisWidth={100} type="merchant" invoices={invoices} />
+            <InvoiceChart
+              yAxisWidth={100}
+              type="category"
+              invoices={invoices}
+              isLoading={loading}
+            />
+            <InvoiceChart
+              yAxisWidth={100}
+              type="merchant"
+              invoices={invoices}
+              isLoading={loading}
+            />
           </div>
         </div>
       </section>
