@@ -221,11 +221,6 @@ export async function POST(req: NextRequest) {
           const fromHeader = headers.find((h: any) => h.name?.toLowerCase() === 'from');
           const dateHeader = headers.find((h: any) => h.name?.toLowerCase() === 'date');
 
-          const emailMetadata = {
-            from: fromHeader?.value || 'Unknown',
-            date: dateHeader?.value || new Date().toISOString()
-          };
-
           // Create initial invoice record
           console.log('💾 Creating invoice record...');
           const initialInvoiceData: InvoiceData = {
