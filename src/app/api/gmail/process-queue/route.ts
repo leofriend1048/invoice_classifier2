@@ -99,11 +99,13 @@ async function processUserQueue(userEmail: string) {
                 const message = await getMessage(gmail, messageId);
                 if (!message) continue;
 
+                let invoiceProcessedForMessage = false;
                 const attachments = extractAttachmentsFromMessage(message);
                 for (const attachment of attachments) {
+                    if (invoiceProcessedForMessage) break;
                     if (!isInvoiceFile(attachment.filename, attachment.mimeType)) continue;
 
-                    const { data: existing } = await supabaseServer.from('invoice_class_invoices').select('id').eq('attachment_filename', attachment.filename).limit(1);
+                    const { data: existing } = await supabaseServer.from('invoice_class_invoices').select('id').eq('attachment_filename', attachment.filename).eq('gmail_message_id', messageId).limit(1);
                     if (existing && existing.length > 0) {
                         console.log(`⏭️ Attachment already processed: ${attachment.filename}`);
                         continue;
@@ -127,6 +129,8 @@ async function processUserQueue(userEmail: string) {
                     };
                     const invoiceRecord = await insertInvoice(initialInvoiceData);
                     if (!invoiceRecord) continue;
+
+                    invoiceProcessedForMessage = true;
 
                     const extractedData = await extractInvoiceDataWithGPT4o(pdfUrl);
                     if (extractedData) {

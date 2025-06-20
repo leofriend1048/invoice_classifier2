@@ -112,23 +112,13 @@ export function extractAttachmentsFromMessage(message: any) {
 }
 
 export function isInvoiceFile(filename: string, mimeType: string): boolean {
-  // Allow any PDF file as an invoice
-  if (mimeType === 'application/pdf' || filename.toLowerCase().endsWith('.pdf')) {
-    return true;
+  const isPdf = mimeType === 'application/pdf' || filename.toLowerCase().endsWith('.pdf');
+  
+  if (!isPdf) {
+    console.log(`[isInvoiceFile] Skipping file: ${filename} (${mimeType}) - Not a PDF.`);
   }
-  // Otherwise, use previous logic for images and keywords
-  const invoiceKeywords = ['invoice', 'bill', 'receipt', 'statement'];
-  const validMimeTypes = ['image/jpeg', 'image/png', 'image/gif'];
-  const hasInvoiceKeyword = invoiceKeywords.some(keyword => 
-    filename.toLowerCase().includes(keyword)
-  );
-  const isValidMimeType = validMimeTypes.includes(mimeType);
-  if (hasInvoiceKeyword && isValidMimeType) {
-    return true;
-  }
-  // Log if skipped
-  console.log(`[isInvoiceFile] Skipping file: ${filename} (${mimeType}) - Not recognized as invoice`);
-  return false;
+  
+  return isPdf;
 }
 
 // Enhanced Gmail client function that automatically handles token refresh
