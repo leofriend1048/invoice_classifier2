@@ -44,6 +44,7 @@ export async function POST(req: NextRequest) {
     let extractedData = await extractInvoiceDataWithGPT4o(invoice.pdf_url);
     
     if (!extractedData) {
+      console.error('❌ Failed to extract data from invoice');
       return NextResponse.json(
         { error: 'Failed to extract data from invoice' },
         { status: 500 }
@@ -76,33 +77,57 @@ export async function POST(req: NextRequest) {
     }
     // --- End vendor name post-processing ---
 
+    // Validate required fields
+    if (!extractedData.vendor_name || !extractedData.amount || !extractedData.extracted_text) {
+      console.error('❌ Missing required fields after extraction:', {
+        hasVendorName: !!extractedData.vendor_name,
+        hasAmount: !!extractedData.amount,
+        hasExtractedText: !!extractedData.extracted_text
+      });
+      return NextResponse.json(
+        { error: 'Missing required fields after extraction' },
+        { status: 500 }
+      );
+    }
+
     // Classify the invoice
-    let classificationSuggestion = null;
-    if (extractedData.vendor_name && extractedData.amount && extractedData.extracted_text) {
-      classificationSuggestion = await classifyInvoiceWithGPT4o(
-        vendorName,
-        extractedData.amount,
-        extractedData.extracted_text
+    console.log('🔍 Starting invoice classification...', {
+      vendor: extractedData.vendor_name,
+      amount: extractedData.amount,
+      textLength: extractedData.extracted_text.length
+    });
+
+    const classificationSuggestion = await classifyInvoiceWithGPT4o(
+      extractedData.vendor_name,
+      extractedData.amount,
+      extractedData.extracted_text
+    );
+
+    if (!classificationSuggestion) {
+      console.error('❌ Classification failed');
+      return NextResponse.json(
+        { error: 'Classification failed' },
+        { status: 500 }
       );
     }
 
     // Update invoice with extracted data and classification
     const updateData = {
-      vendor_name: extractedData.vendor_name || invoice.vendor_name,
-      invoice_date: extractedData.invoice_date || invoice.invoice_date,
-      due_date: extractedData.due_date || invoice.due_date,
-      amount: extractedData.amount || invoice.amount,
-      extracted_text: extractedData.extracted_text || invoice.extracted_text,
-      classification_suggestion: classificationSuggestion || invoice.classification_suggestion,
+      vendor_name: extractedData.vendor_name,
+      invoice_date: extractedData.invoice_date,
+      due_date: extractedData.due_date,
+      amount: extractedData.amount,
+      extracted_text: extractedData.extracted_text,
+      classification_suggestion: classificationSuggestion,
       updated_at: new Date().toISOString(),
       // Persist classification fields to main columns
-      gl_account: classificationSuggestion?.gl_account || null,
-      branch: classificationSuggestion?.branch || null,
-      division: classificationSuggestion?.division || 'Ecommerce',
-      payment_method: classificationSuggestion?.payment_method || null,
-      category: classificationSuggestion?.category || null,
-      subcategory: classificationSuggestion?.subcategory || null,
-      description: classificationSuggestion?.description || null,
+      gl_account: classificationSuggestion.gl_account,
+      branch: classificationSuggestion.branch,
+      division: classificationSuggestion.division,
+      payment_method: classificationSuggestion.payment_method,
+      category: classificationSuggestion.category,
+      subcategory: classificationSuggestion.subcategory,
+      description: classificationSuggestion.description,
     };
 
     const { data: updatedInvoice, error: updateError } = await supabaseServer

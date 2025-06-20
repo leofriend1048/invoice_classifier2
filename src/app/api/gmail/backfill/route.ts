@@ -2,17 +2,37 @@ export const dynamic = "force-dynamic";
 
 import { classifyInvoice, updateVendorProfile } from '@/lib/classification';
 import {
-  downloadAttachment,
-  extractAttachmentsFromMessage,
-  getFreshGmailClient,
-  getMessage,
-  isInvoiceFile
+    downloadAttachment,
+    extractAttachmentsFromMessage,
+    getFreshGmailClient,
+    getMessage,
+    isInvoiceFile
 } from '@/lib/google/gmail';
 import { getStoredTokensForEmail } from '@/lib/google/token-storage';
 import { extractInvoiceDataWithGPT4o } from '@/lib/openai';
 import { insertInvoice, supabaseServer, uploadFileToStorage } from '@/lib/supabase-server';
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
+
+// Add type definition at the top of the file
+interface InvoiceData {
+  vendor_name: string;
+  extracted_text: string;
+  pdf_url: string;
+  status: "pending";
+  gmail_message_id: string;
+  attachment_filename: string;
+  amount?: number;
+  invoice_date?: string;
+  due_date?: string;
+  gl_account?: string | null;
+  branch?: string | null;
+  division?: string | null;
+  payment_method?: string | null;
+  category?: string | null;
+  subcategory?: string | null;
+  description?: string | null;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -208,11 +228,11 @@ export async function POST(req: NextRequest) {
 
           // Create initial invoice record
           console.log('💾 Creating invoice record...');
-          const initialInvoiceData = {
-            vendor_name: extractVendorFromEmail(emailMetadata.from),
-            extracted_text: `Email from: ${emailMetadata.from}\nDate: ${emailMetadata.date}`,
+          const initialInvoiceData: InvoiceData = {
+            vendor_name: 'Unknown Vendor',
+            extracted_text: '',
             pdf_url: pdfUrl,
-            status: 'pending' as const,
+            status: 'pending',
             gmail_message_id: messageRef.id,
             attachment_filename: attachment.filename
           };
@@ -232,90 +252,109 @@ export async function POST(req: NextRequest) {
             try {
               const extractedData = await extractInvoiceDataWithGPT4o(pdfUrl);
               
-              if (extractedData) {
-                // Check for duplicate invoice signature after extraction
-                const invoiceSignature = `${extractedData.vendor_name}-${extractedData.amount}-${extractedData.invoice_date}`.toLowerCase();
-                if (existingInvoiceSignatures.has(invoiceSignature)) {
-                  console.log(`🔄 Skipping duplicate invoice: ${invoiceSignature} (same vendor/amount/date already exists)`);
-                  
-                  // Delete the uploaded file since we're not using it
-                  const fileName = pdfUrl.split('/').pop();
-                  if (fileName) {
-                    await supabaseServer.storage
-                      .from('invoices-pdf')
-                      .remove([fileName]);
-                  }
-                  
-                  // Delete the invoice record we just created
-                  await supabaseServer
-                    .from('invoice_class_invoices')
-                    .delete()
-                    .eq('id', invoiceRecord.id);
-                  
-                  continue;
+              if (!extractedData) {
+                console.error('❌ Failed to extract data from invoice');
+                continue;
+              }
+
+              // Check for duplicate invoice signature after extraction
+              const invoiceSignature = `${extractedData.vendor_name}-${extractedData.amount}-${extractedData.invoice_date}`.toLowerCase();
+              if (existingInvoiceSignatures.has(invoiceSignature)) {
+                console.log(`🔄 Skipping duplicate invoice: ${invoiceSignature} (same vendor/amount/date already exists)`);
+                
+                // Delete the uploaded file since we're not using it
+                const fileName = pdfUrl.split('/').pop();
+                if (fileName) {
+                  await supabaseServer.storage
+                    .from('invoices-pdf')
+                    .remove([fileName]);
                 }
-
-                // Add this signature to our tracking set
-                existingInvoiceSignatures.add(invoiceSignature);
-
-                console.log('✅ GPT-4o extraction successful');
                 
-                // Now classify the invoice (MISSING STEP FROM BACKFILL!)
-                console.log('🔍 Starting invoice classification...');
-                const classification = await classifyInvoice(
-                  extractedData.vendor_name || initialInvoiceData.vendor_name,
-                  extractedData.amount || 0,
-                  extractedData.extracted_text || initialInvoiceData.extracted_text
-                );
+                // Delete the invoice record we just created
+                await supabaseServer
+                  .from('invoice_class_invoices')
+                  .delete()
+                  .eq('id', invoiceRecord.id);
                 
-                console.log('✅ Classification completed:', classification);
+                continue;
+              }
 
-                // Update invoice with extracted data AND classification
-                const updateData = {
-                  vendor_name: extractedData.vendor_name || initialInvoiceData.vendor_name,
-                  invoice_date: extractedData.invoice_date,
-                  due_date: extractedData.due_date,
-                  amount: extractedData.amount,
-                  extracted_text: extractedData.extracted_text || initialInvoiceData.extracted_text,
-                  gl_account: classification.gl_account,
-                  branch: classification.branch,
-                  division: classification.division,
-                  payment_method: classification.payment_method,
+              // Add this signature to our tracking set
+              existingInvoiceSignatures.add(invoiceSignature);
+
+              // Validate required fields
+              if (!extractedData.vendor_name || !extractedData.amount || !extractedData.extracted_text) {
+                console.error('❌ Missing required fields after extraction:', {
+                  hasVendorName: !!extractedData.vendor_name,
+                  hasAmount: !!extractedData.amount,
+                  hasExtractedText: !!extractedData.extracted_text
+                });
+                continue;
+              }
+
+              console.log('✅ GPT-4o extraction successful');
+              
+              // Now classify the invoice using hybrid system
+              console.log('🔍 Starting invoice classification...', {
+                vendor: extractedData.vendor_name,
+                amount: extractedData.amount,
+                textLength: extractedData.extracted_text.length
+              });
+
+              const classification = await classifyInvoice(
+                extractedData.vendor_name,
+                extractedData.amount,
+                extractedData.extracted_text
+              );
+              
+              if (!classification) {
+                console.error('❌ Classification failed');
+                continue;
+              }
+
+              console.log('✅ Classification completed:', classification);
+
+              // Update invoice with extracted data and classification
+              const updateData = {
+                vendor_name: extractedData.vendor_name,
+                invoice_date: extractedData.invoice_date,
+                due_date: extractedData.due_date,
+                amount: extractedData.amount,
+                extracted_text: extractedData.extracted_text,
+                gl_account: classification.gl_account,
+                branch: classification.branch,
+                division: classification.division,
+                payment_method: classification.payment_method,
+                category: classification.category,
+                subcategory: classification.subcategory,
+                description: classification.description,
+                classification_suggestion: {
                   category: classification.category,
                   subcategory: classification.subcategory,
                   description: classification.description,
-                  classification_suggestion: {
-                    category: classification.category,
-                    subcategory: classification.subcategory,
-                    description: classification.description,
-                    confidence: classification.confidence,
-                    method: classification.method,
-                    pattern_id: classification.pattern_id
-                  },
-                  updated_at: new Date().toISOString()
-                };
+                  confidence: classification.confidence,
+                  method: classification.method,
+                  pattern_id: classification.pattern_id
+                },
+                updated_at: new Date().toISOString()
+              };
 
-                await supabaseServer
-                  .from('invoice_class_invoices')
-                  .update(updateData)
-                  .eq('id', invoiceRecord.id);
+              await supabaseServer
+                .from('invoice_class_invoices')
+                .update(updateData)
+                .eq('id', invoiceRecord.id);
 
-                console.log('✅ Invoice updated with GPT-4o data and classification');
+              console.log('✅ Invoice updated with classification');
 
-                // Update vendor profile (ANOTHER MISSING STEP!)
-                if (extractedData.vendor_name && extractedData.amount) {
-                  console.log('👤 Updating vendor profile...');
-                  await updateVendorProfile(
-                    extractedData.vendor_name,
-                    classification.category,
-                    extractedData.amount
-                  );
-                  console.log('✅ Vendor profile updated');
-                }
-              }
-            } catch (gptError) {
-              console.error('⚠️ GPT-4o processing failed:', gptError);
-              // Continue processing - don't fail the whole operation
+              // Update vendor profile for better future classifications
+              await updateVendorProfile(
+                extractedData.vendor_name,
+                classification.category,
+                extractedData.amount
+              );
+            } catch (error) {
+              console.error('❌ Error processing invoice:', error);
+              continue;
             }
           }
 

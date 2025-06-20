@@ -55,25 +55,45 @@ export async function classifyInvoice(
   amount: number,
   extractedText: string
 ): Promise<ClassificationResult> {
-  console.log('🔍 Starting invoice classification...');
-  console.log('🏢 Vendor:', vendorName);
-  console.log('💰 Amount:', amount);
+  const startTime = Date.now();
+  console.log('🔍 Starting invoice classification...', {
+    vendorName,
+    amount,
+    textLength: extractedText.length,
+    timestamp: new Date().toISOString()
+  });
 
   try {
     // Step 0: Fetch unique categories/subcategories from non-pending invoices
+    console.log('📊 Fetching historical classification data...');
     const { data: catData, error: catError } = await supabaseServer
       .from('invoice_class_invoices')
       .select('category, subcategory, status, vendor_name')
       .neq('status', 'pending');
-    let uniqueCategories: string[] = [];
-    if (!catError && catData) {
-      uniqueCategories = Array.from(new Set(catData.map((row: any) => row.category).filter(Boolean)));
+
+    if (catError) {
+      console.error('❌ Failed to fetch historical data:', catError);
+      throw catError;
     }
 
-    // Step 1: Vendor-level learning: check for previous non-pending invoices for this vendor
+    let uniqueCategories: string[] = [];
+    if (catData) {
+      uniqueCategories = Array.from(new Set(catData.map((row: any) => row.category).filter(Boolean)));
+      console.log('📈 Found unique categories:', uniqueCategories);
+    }
+
+    // Step 1: Vendor-level learning
+    console.log('👥 Checking vendor history...');
     const vendorInvoices = (catData || []).filter((row: any) => row.vendor_name === vendorName);
+    console.log(`Found ${vendorInvoices.length} previous invoices for vendor`);
+    
     const lastVendorInvoice = vendorInvoices.length > 0 ? vendorInvoices[vendorInvoices.length - 1] : null;
     if (lastVendorInvoice && lastVendorInvoice.category && lastVendorInvoice.subcategory) {
+      console.log('✨ Using vendor history for classification:', {
+        category: lastVendorInvoice.category,
+        subcategory: lastVendorInvoice.subcategory
+      });
+
       // Use vendor's last category/subcategory, but generate new description
       const gptDesc = await classifyInvoiceWithGPT4o(
         vendorName,
@@ -84,6 +104,11 @@ export async function classifyInvoice(
         lastVendorInvoice.subcategory,
         true // description only
       );
+
+      if (!gptDesc) {
+        console.warn('⚠️ Failed to get description from GPT-4o, using fallback');
+      }
+
       return {
         category: lastVendorInvoice.category,
         subcategory: lastVendorInvoice.subcategory,
@@ -97,11 +122,21 @@ export async function classifyInvoice(
       };
     }
 
-    // Step 2: Try pattern-based classification
+    // Step 2: Pattern-based classification
     console.log('📋 Attempting pattern-based classification...');
     const patternResult = await classifyWithPatterns(vendorName, amount, extractedText);
+    if (patternResult) {
+      console.log('🎯 Found matching pattern:', {
+        category: patternResult.category,
+        subcategory: patternResult.subcategory,
+        confidence: patternResult.confidence,
+        pattern_id: patternResult.pattern_id
+      });
+    } else {
+      console.log('📝 No matching patterns found');
+    }
     
-    // Step 3: Get GPT-4o classification with injected categories/subcategories
+    // Step 3: Get GPT-4o classification
     console.log('🤖 Getting GPT-4o classification...');
     const gptResult = await classifyInvoiceWithGPT4o(
       vendorName,
@@ -109,6 +144,16 @@ export async function classifyInvoice(
       extractedText,
       uniqueCategories
     );
+
+    if (gptResult) {
+      console.log('🎉 GPT-4o classification successful:', {
+        category: gptResult.category,
+        subcategory: gptResult.subcategory,
+        confidence: gptResult.confidence
+      });
+    } else {
+      console.error('❌ GPT-4o classification failed');
+    }
     
     // Step 4: Apply hybrid logic
     console.log('🔀 Applying hybrid classification logic...');
@@ -129,13 +174,25 @@ export async function classifyInvoice(
           description: gptResult.description ?? '',
         }
       : null;
+
     const hybridResult = await applyHybridLogic(safePatternResult, safeGptResult, vendorName);
     
-    console.log('✅ Classification completed:', hybridResult);
+    console.log('✅ Classification completed:', {
+      result: hybridResult,
+      method: hybridResult.method,
+      confidence: hybridResult.confidence,
+      duration: `${Date.now() - startTime}ms`
+    });
     return hybridResult;
     
   } catch (error) {
-    console.error('💥 Classification error:', error);
+    console.error('💥 Classification error:', {
+      error,
+      vendorName,
+      amount,
+      textLength: extractedText.length,
+      timestamp: new Date().toISOString()
+    });
     // Fallback: return a basic classification
     return {
       category: 'Business Services',
