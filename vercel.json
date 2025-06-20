@@ -1,16 +1,12 @@
 {
   "crons": [
     {
-      "path": "/api/cron/gmail-backfill",
-      "schedule": "0 0 * * *"
-    },
-    {
       "path": "/api/cron/process-gmail-queue",
-      "schedule": "* * * * *"
+      "schedule": "0 0 * * *"
     },
     {
-      "path": "/api/reprocess-failed-classifications",
-      "schedule": "0 0 * * *"
+      "path": "/api/cron/daily-maintenance",
+      "schedule": "0 1 * * *"
     }
   ]
 } 
