@@ -216,9 +216,6 @@ export async function POST(req: NextRequest) {
             continue;
           }
 
-          // Extract email metadata
-          const headers = message.payload?.headers || [];
-
           // Create initial invoice record
           console.log('💾 Creating invoice record...');
           const initialInvoiceData: InvoiceData = {
@@ -395,23 +392,4 @@ export async function POST(req: NextRequest) {
       details: error instanceof Error ? error.message : String(error)
     });
   }
-}
-
-function extractVendorFromEmail(fromEmail: string): string {
-  // Extract vendor name from email "from" field
-  if (!fromEmail) return 'Unknown Vendor';
-  
-  // Handle "Name <email@domain.com>" format
-  const match = fromEmail.match(/^(.+?)\s*<(.+)>$/);
-  if (match) {
-    return match[1].trim().replace(/"/g, '');
-  }
-  
-  // Handle just email format
-  if (fromEmail.includes('@')) {
-    const domain = fromEmail.split('@')[1];
-    return domain.split('.')[0]; // Get domain name without TLD
-  }
-  
-  return fromEmail;
 } 
