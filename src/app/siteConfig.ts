@@ -1,6 +1,6 @@
 export const siteConfig = {
   name: "Invoice Tracker",
-  url: "https://insights.tremor.so",
+  url: "https://invoice-classifier-bay.vercel.app",
   description: "The only reporting and audit dashboard you will ever need.",
   baseLinks: {
     reports: "/reports",
