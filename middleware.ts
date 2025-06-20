@@ -28,6 +28,11 @@ const AUTH_ROUTES = [
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   
+  // Immediately allow the cron job to run without any authentication checks
+  if (pathname === '/api/gmail/process-queue') {
+    return NextResponse.next();
+  }
+  
   // Middleware only runs for paths matched by config.matcher
   // No need to skip here since matcher already excludes API routes, static files, etc.
   console.log(`[Middleware] Processing: ${pathname}`);
