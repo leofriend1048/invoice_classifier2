@@ -13,9 +13,10 @@ const PROTECTED_ROUTES = [
 // Define public routes that don't require authentication
 const PUBLIC_ROUTES = [
   '/login',
-  '/signup', 
+  '/signup',
   '/reset-password',
-  '/api', // All API routes are public
+  '/api/gmail/webhook', // Gmail push notifications
+  '/api/gmail/process-queue', // Public endpoint for cron job
 ];
 
 // Define auth routes that should redirect to dashboard if already logged in
@@ -90,12 +91,10 @@ export const config = {
   matcher: [
     /*
      * Match all request paths except for the ones starting with:
-     * - api (API routes - handled separately)
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
-     * - public folder files
      */
-    '/((?!api|_next/static|_next/image|favicon.ico|.*\\..*$).*)',
+    '/((?!_next/static|_next/image|favicon.ico).*)',
   ],
 } 
