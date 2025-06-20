@@ -1,3 +1,4 @@
+import { siteConfig } from '@/app/siteConfig';
 import { NextResponse } from 'next/server';
 
 export async function GET() {
@@ -7,9 +8,7 @@ export async function GET() {
     // In production, you might want to add auth verification like in the backfill cron
     // For simplicity here, we'll proceed directly.
 
-    const baseUrl = process.env.VERCEL_URL 
-      ? `https://${process.env.VERCEL_URL}`
-      : 'http://localhost:3000';
+    const baseUrl = siteConfig.url;
 
     const apiUrl = `${baseUrl}/api/gmail/process-queue`;
     console.log(`📡 Making internal call to: ${apiUrl}`);
