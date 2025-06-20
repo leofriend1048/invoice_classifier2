@@ -227,7 +227,9 @@ export async function classifyInvoiceWithGPT4o(
 
       let prompt = '';
       if (descriptionOnly) {
-        prompt = `Given the following invoice text, generate a brief, clear description of what the invoice is for. Do not mention the word "invoice" in your response. Only return the description.`;
+        prompt = `Based on the text below, write a brief, one-sentence description of the invoice's purpose.
+        Text: ${extractedText.substring(0, 1500)}
+        Example: "Software subscription for marketing analytics."`;
       } else {
         prompt = `Context: This is an invoice from ${vendorName}.
 `;
