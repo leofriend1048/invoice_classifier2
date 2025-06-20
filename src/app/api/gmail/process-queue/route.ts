@@ -19,12 +19,10 @@ function extractVendorFromEmail(email: string): string {
     return email.split('@')[0].replace(/[._]/g, ' ').trim();
 }
 
-export async function POST() {
-    const userEmail = 'mtbinvoice@gmail.com'; // Hardcoded for this cron job
+async function processUserQueue(userEmail: string) {
+    console.log(`\n--- Processing queue for ${userEmail} ---`);
     let lockAcquired = false;
-
     try {
-        // 1. Check for and acquire a process lock
         const { data: tokenRow, error: tokenError } = await supabaseServer
             .from('google_tokens')
             .select('is_processing, last_checked_at, start_history_id')
@@ -32,24 +30,23 @@ export async function POST() {
             .single();
 
         if (tokenError || !tokenRow) {
-            console.log('🤷 No token row found for user, exiting.');
-            return NextResponse.json({ success: true, message: 'No user token row.' });
+            console.log(`🤷 No token row found for ${userEmail}, skipping.`);
+            return { success: true, message: 'No token row.' };
         }
 
         const now = new Date();
         if (tokenRow.is_processing && tokenRow.last_checked_at) {
             const lockAge = now.getTime() - new Date(tokenRow.last_checked_at).getTime();
             if (lockAge < 5 * 60 * 1000) { // 5 minute lock
-                console.log('🏃 Process already running, exiting.');
-                return NextResponse.json({ success: true, message: 'Process already running.' });
+                console.log(`🏃 Process already running for ${userEmail}, skipping.`);
+                return { success: true, message: 'Process already running.' };
             }
-            console.log(`🔓 Stale lock detected (${Math.round(lockAge / 1000 / 60)} min), proceeding.`);
+            console.log(`🔓 Stale lock for ${userEmail} (${Math.round(lockAge / 1000 / 60)} min), proceeding.`);
         }
-        
+
         await supabaseServer.from('google_tokens').update({ is_processing: true, last_checked_at: now.toISOString() }).eq('email', userEmail);
         lockAcquired = true;
 
-        // 2. Fetch all unprocessed events from the queue
         const { data: queuedEvents, error: queueError } = await supabaseServer
             .from('gmail_event_queue')
             .select('history_id')
@@ -58,29 +55,26 @@ export async function POST() {
             .order('history_id', { ascending: true });
 
         if (queueError || queuedEvents.length === 0) {
-            console.log('📪 Queue is empty, exiting.');
+            console.log(`📪 Queue is empty for ${userEmail}.`);
             await supabaseServer.from('google_tokens').update({ processing_pending: false }).eq('email', userEmail);
-            return NextResponse.json({ success: true, message: 'Queue is empty.' });
+            return { success: true, message: 'Queue is empty.' };
         }
 
         const highestQueuedId = Math.max(...queuedEvents.map(e => Number(e.history_id)));
         const lastHistoryId = Number(tokenRow.start_history_id);
 
         if (highestQueuedId <= lastHistoryId) {
-            console.log('✅ History ID already caught up, clearing queue.');
+            console.log(`✅ History ID already caught up for ${userEmail}, clearing queue.`);
             await supabaseServer.from('gmail_event_queue').update({ processed: true }).eq('email', userEmail).lte('history_id', highestQueuedId);
             await supabaseServer.from('google_tokens').update({ processing_pending: false }).eq('email', userEmail);
-            return NextResponse.json({ success: true, message: 'History ID up to date.' });
+            return { success: true, message: 'History ID up to date.' };
         }
-        
-        console.log(`🔄 Processing from ${lastHistoryId} to ${highestQueuedId}`);
 
-        // 3. Initialize Gmail client
+        console.log(`🔄 Processing ${userEmail} from ${lastHistoryId} to ${highestQueuedId}`);
         const tokens = await getStoredTokensForEmail(userEmail);
-        if (!tokens) throw new Error('No stored Gmail tokens found.');
+        if (!tokens) throw new Error(`No stored Gmail tokens for ${userEmail}.`);
         const gmail = await getFreshGmailClient(tokens, userEmail);
 
-        // 4. Call Gmail History API
         const historyResp = await gmail.users.history.list({
             userId: 'me',
             startHistoryId: lastHistoryId.toString(),
@@ -90,11 +84,8 @@ export async function POST() {
         const historyItems = historyResp.data?.history || [];
         const newMessageIds = historyItems.flatMap((h: any) => h.messagesAdded || []).map((m: any) => m.message.id);
 
-        if (newMessageIds.length === 0) {
-            console.log('✅ No new messages from history, updating pointer and clearing queue.');
-        } else {
-            console.log(`📨 Found ${newMessageIds.length} new message(s).`);
-            // Timeout protection
+        if (newMessageIds.length > 0) {
+            console.log(`📨 Found ${newMessageIds.length} new message(s) for ${userEmail}.`);
             const startTime = Date.now();
             const maxProcessingTime = 50000; // 50 seconds
 
@@ -103,8 +94,8 @@ export async function POST() {
                     console.log('⏰ Approaching timeout, will continue on next run.');
                     break;
                 }
-                
-                console.log('🆔 Processing messageId =', messageId);
+
+                console.log(`🆔 Processing messageId ${messageId} for ${userEmail}`);
                 const message = await getMessage(gmail, messageId);
                 if (!message) continue;
 
@@ -114,7 +105,7 @@ export async function POST() {
 
                     const { data: existing } = await supabaseServer.from('invoice_class_invoices').select('id').eq('attachment_filename', attachment.filename).limit(1);
                     if (existing && existing.length > 0) {
-                        console.log('⏭️ Attachment already processed, skipping:', attachment.filename);
+                        console.log(`⏭️ Attachment already processed: ${attachment.filename}`);
                         continue;
                     }
 
@@ -135,11 +126,8 @@ export async function POST() {
                         gmail_message_id: messageId, attachment_filename: attachment.filename
                     };
                     const invoiceRecord = await insertInvoice(initialInvoiceData);
-                    if (!invoiceRecord) {
-                        // Cleanup storage?
-                        continue;
-                    }
-                    
+                    if (!invoiceRecord) continue;
+
                     const extractedData = await extractInvoiceDataWithGPT4o(pdfUrl);
                     if (extractedData) {
                         const classification = await classifyInvoice(extractedData.vendor_name || initialInvoiceData.vendor_name, extractedData.amount || 0, extractedData.extracted_text || '');
@@ -152,27 +140,60 @@ export async function POST() {
                 }
             }
         }
-
-        // 5. Update pointers and clear processed queue items
+        
         await supabaseServer.from('google_tokens').update({ start_history_id: highestQueuedId }).eq('email', userEmail);
         await supabaseServer.from('gmail_event_queue').update({ processed: true }).eq('email', userEmail).lte('history_id', highestQueuedId);
-        
-        // Check if there are still pending events
-        const { data: remaining } = await supabaseServer.from('gmail_event_queue').select('history_id').eq('email', userEmail).eq('processed', false).limit(1);
-        if (remaining && remaining.length === 0) {
+
+        const { data: remaining } = await supabaseServer.from('gmail_event_queue').select('id').eq('email', userEmail).eq('processed', false).limit(1);
+        if (!remaining || remaining.length === 0) {
             await supabaseServer.from('google_tokens').update({ processing_pending: false }).eq('email', userEmail);
-            console.log('✅ Queue empty, pending flag cleared.');
+            console.log(`✅ Queue empty for ${userEmail}, pending flag cleared.`);
         }
 
-        return NextResponse.json({ success: true, message: `Processed up to historyId ${highestQueuedId}` });
-
+        return { success: true, message: `Processed ${userEmail} up to historyId ${highestQueuedId}` };
     } catch (error) {
-        console.error('💥 Queue processing error:', error);
-        return NextResponse.json({ error: 'Queue processing failed', details: error }, { status: 500 });
+        console.error(`💥 Queue processing error for ${userEmail}:`, error);
+        return { success: false, error: 'Queue processing failed', details: error };
     } finally {
         if (lockAcquired) {
             await supabaseServer.from('google_tokens').update({ is_processing: false }).eq('email', userEmail);
-            console.log('🔑 Lock released.');
+            console.log(`🔑 Lock released for ${userEmail}.`);
         }
     }
-} 
+}
+
+export async function POST() {
+    try {
+        const { data: usersToProcess, error: usersError } = await supabaseServer
+            .from('google_tokens')
+            .select('email')
+            .eq('processing_pending', true);
+
+        if (usersError) {
+            console.error('Error fetching users to process:', usersError);
+            throw new Error('Could not fetch users to process.');
+        }
+
+        if (!usersToProcess || usersToProcess.length === 0) {
+            return NextResponse.json({ success: true, message: 'No users to process.' });
+        }
+
+        console.log(`Found ${usersToProcess.length} user(s) to process.`);
+        
+        const results = [];
+        for (const user of usersToProcess) {
+            const result = await processUserQueue(user.email);
+            results.push({ email: user.email, ...result });
+        }
+
+        return NextResponse.json({ success: true, results });
+
+    } catch (error) {
+        console.error('💥 Top-level POST error:', error);
+        return NextResponse.json({ 
+            success: false, 
+            error: 'Failed to process queues', 
+            details: error instanceof Error ? error.message : 'Unknown error' 
+        }, { status: 500 });
+    }
+}
