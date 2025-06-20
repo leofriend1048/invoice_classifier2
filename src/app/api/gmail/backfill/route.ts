@@ -218,8 +218,6 @@ export async function POST(req: NextRequest) {
 
           // Extract email metadata
           const headers = message.payload?.headers || [];
-          const fromHeader = headers.find((h: any) => h.name?.toLowerCase() === 'from');
-          const dateHeader = headers.find((h: any) => h.name?.toLowerCase() === 'date');
 
           // Create initial invoice record
           console.log('💾 Creating invoice record...');
