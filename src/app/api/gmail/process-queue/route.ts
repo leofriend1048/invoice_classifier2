@@ -10,6 +10,7 @@ import {
 import { getStoredTokensForEmail } from '@/lib/google/token-storage';
 import { extractInvoiceDataWithGPT4o } from '@/lib/openai';
 import { insertInvoice, supabaseServer, uploadFileToStorage } from '@/lib/supabase-server';
+import { createSafeUniqueFilename } from '@/lib/url-utils';
 import { NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -115,7 +116,9 @@ async function processUserQueue(userEmail: string) {
                     if (!attachmentData?.data) continue;
 
                     const fileBuffer = Buffer.from(attachmentData.data, 'base64');
-                    const uniqueFilename = `${uuidv4()}-${attachment.filename}`;
+                    const uniqueFilename = createSafeUniqueFilename(attachment.filename, uuidv4());
+                    console.log(`📄 Original filename: ${attachment.filename}`);
+                    console.log(`📄 Safe filename: ${uniqueFilename}`);
                     const pdfUrl = await uploadFileToStorage(fileBuffer, uniqueFilename, attachment.mimeType);
                     if (!pdfUrl) continue;
 

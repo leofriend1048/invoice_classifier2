@@ -2,15 +2,16 @@ export const dynamic = "force-dynamic";
 
 import { classifyInvoice, updateVendorProfile } from '@/lib/classification';
 import {
-    downloadAttachment,
-    extractAttachmentsFromMessage,
-    getFreshGmailClient,
-    getMessage,
-    isInvoiceFile
+  downloadAttachment,
+  extractAttachmentsFromMessage,
+  getFreshGmailClient,
+  getMessage,
+  isInvoiceFile
 } from '@/lib/google/gmail';
 import { getStoredTokensForEmail } from '@/lib/google/token-storage';
 import { extractInvoiceDataWithGPT4o } from '@/lib/openai';
 import { insertInvoice, supabaseServer, uploadFileToStorage } from '@/lib/supabase-server';
+import { createSafeUniqueFilename } from '@/lib/url-utils';
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -201,9 +202,12 @@ export async function POST(req: NextRequest) {
 
           // Convert to buffer and upload
           const fileBuffer = Buffer.from(attachmentData.data, 'base64');
-          const uniqueFilename = `${uuidv4()}-${attachment.filename}`;
+          const uniqueFilename = createSafeUniqueFilename(attachment.filename, uuidv4());
           
           console.log('☁️ Uploading to Supabase Storage...');
+          console.log(`📄 Original filename: ${attachment.filename}`);
+          console.log(`📄 Safe filename: ${uniqueFilename}`);
+
           const pdfUrl = await uploadFileToStorage(
             fileBuffer,
             uniqueFilename,

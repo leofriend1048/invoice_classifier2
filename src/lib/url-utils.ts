@@ -29,4 +29,42 @@ export function getFullUrl(path: string): string {
     return path;
   }
   return joinUrl(baseUrl, path);
+}
+
+/**
+ * Sanitizes a filename to be safe for file storage and URLs
+ * Replaces problematic characters with safe alternatives while preserving readability
+ * @param filename - The original filename
+ * @returns A sanitized filename safe for storage
+ */
+export function sanitizeFilename(filename: string): string {
+  if (!filename || typeof filename !== 'string') {
+    return 'unknown';
+  }
+  
+  return filename
+    // Replace brackets with parentheses
+    .replace(/\[/g, '(')
+    .replace(/\]/g, ')')
+    // Replace hash with underscore
+    .replace(/#/g, '_')
+    // Replace other problematic characters
+    .replace(/[<>:"|?*]/g, '_')
+    // Replace multiple spaces with single space
+    .replace(/\s+/g, ' ')
+    // Remove leading/trailing whitespace
+    .trim()
+    // Limit length to prevent issues
+    .substring(0, 255);
+}
+
+/**
+ * Creates a safe unique filename by combining UUID with sanitized original filename
+ * @param originalFilename - The original filename from the attachment
+ * @param uuid - A unique identifier (typically from uuidv4())
+ * @returns A safe unique filename
+ */
+export function createSafeUniqueFilename(originalFilename: string, uuid: string): string {
+  const sanitized = sanitizeFilename(originalFilename);
+  return `${uuid}-${sanitized}`;
 } 

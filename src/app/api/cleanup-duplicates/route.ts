@@ -67,15 +67,41 @@ export async function POST() {
         if (duplicate.pdf_url) {
           const fileName = duplicate.pdf_url.split('/').pop();
           if (fileName) {
-            const { error: deleteFileError } = await supabaseServer.storage
-              .from('invoices-pdf')
-              .remove([decodeURIComponent(fileName)]);
-            
-            if (!deleteFileError) {
-              filesDeleted++;
-              console.log(`🗑️ Deleted file: ${fileName}`);
-            } else {
-              console.error(`⚠️ Failed to delete file ${fileName}:`, deleteFileError);
+            try {
+              // Try to decode the filename, but fall back to original if decoding fails
+              const decodedFileName = decodeURIComponent(fileName);
+              const { error: deleteFileError } = await supabaseServer.storage
+                .from('invoices-pdf')
+                .remove([decodedFileName]);
+              
+              if (!deleteFileError) {
+                filesDeleted++;
+                console.log(`🗑️ Deleted file: ${decodedFileName}`);
+              } else {
+                console.error(`⚠️ Failed to delete file ${decodedFileName}:`, deleteFileError);
+                // Try with original filename if decoded version failed
+                const { error: deleteFileError2 } = await supabaseServer.storage
+                  .from('invoices-pdf')
+                  .remove([fileName]);
+                if (!deleteFileError2) {
+                  filesDeleted++;
+                  console.log(`🗑️ Deleted file (fallback): ${fileName}`);
+                } else {
+                  console.error(`⚠️ Failed to delete file ${fileName}:`, deleteFileError2);
+                }
+              }
+            } catch (decodeError) {
+              console.warn(`⚠️ Failed to decode filename ${fileName}, using original:`, decodeError);
+              const { error: deleteFileError } = await supabaseServer.storage
+                .from('invoices-pdf')
+                .remove([fileName]);
+              
+              if (!deleteFileError) {
+                filesDeleted++;
+                console.log(`🗑️ Deleted file: ${fileName}`);
+              } else {
+                console.error(`⚠️ Failed to delete file ${fileName}:`, deleteFileError);
+              }
             }
           }
         }
