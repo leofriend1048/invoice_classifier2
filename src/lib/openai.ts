@@ -79,7 +79,7 @@ const classificationSchema = {
 
 // Add arrays for GL account, branch, and payment method options
 const glAccountOptions = [
-  "618000-00", "606250-40", "687500-00", "6880000-00", "688000-00", "604000-40", "689500-00", "601600-40", "601500-40"
+  "618000-00", "606250-40", "687500-00", "6880000-00", "688000-00", "604000-40", "689500-00", "601600-40", "601500-40", "603800-40", "603805-00"
 ];
 const branchOptions = [
   "Michael Todd Beauty", "NasalFresh MD"
@@ -110,7 +110,7 @@ export async function extractInvoiceDataWithGPT4o(
     // Download the file content
     console.log('📥 Downloading file content...');
     const fileResponse = await fetch(fileUrl);
-    
+
     if (!fileResponse.ok) {
       console.error('❌ Failed to download file:', fileResponse.status);
       return null;
@@ -119,13 +119,13 @@ export async function extractInvoiceDataWithGPT4o(
     const fileBuffer = await fileResponse.arrayBuffer();
     const base64String = Buffer.from(fileBuffer).toString('base64');
     const contentType = fileResponse.headers.get('content-type') || 'application/pdf';
-    
+
     console.log('📊 File downloaded successfully');
     console.log('📋 Content type:', contentType);
     console.log('📦 File size:', fileBuffer.byteLength, 'bytes');
 
     console.log('📤 Sending document to OpenAI GPT-4o with structured output...');
-    
+
     // Use structured outputs to ensure valid JSON response
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
@@ -162,7 +162,7 @@ export async function extractInvoiceDataWithGPT4o(
     console.log('✅ Received structured response from OpenAI');
     const content = response.choices[0]?.message?.content;
     console.log('📝 Response content:', content);
-    
+
     if (!content) {
       console.error('❌ No content in OpenAI response');
       return null;
@@ -181,19 +181,19 @@ export async function extractInvoiceDataWithGPT4o(
 
   } catch (error) {
     console.error('💥 GPT-4o processing error:', error);
-    
+
     // More detailed error logging
     if (error instanceof Error) {
       console.error('❌ Error name:', error.name);
       console.error('❌ Error message:', error.message);
       console.error('❌ Error stack:', error.stack);
     }
-    
+
     // Check if it's an OpenAI API error
     if (error && typeof error === 'object' && 'error' in error) {
       console.error('🔥 OpenAI API Error:', (error as { error: unknown }).error);
     }
-    
+
     return null;
   }
 }
@@ -350,7 +350,7 @@ export async function classifyInvoiceWithGPT4o(
 
       const content = response.choices[0]?.message?.content;
       console.log('📝 Classification response:', content);
-      
+
       if (!content) {
         console.error('❌ No content in classification response');
         return null;
@@ -368,13 +368,13 @@ export async function classifyInvoiceWithGPT4o(
 
     } catch (error) {
       console.error(`💥 GPT-4o classification error (attempt ${retryCount + 1}/${maxRetries}):`, error);
-      
+
       // More detailed error logging
       if (error instanceof Error) {
         console.error('❌ Error name:', error.name);
         console.error('❌ Error message:', error.message);
       }
-      
+
       retryCount++;
       if (retryCount < maxRetries) {
         // Exponential backoff: wait longer between each retry
