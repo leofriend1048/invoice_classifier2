@@ -63,6 +63,8 @@ export function DataTableDrawer({
     { value: "689500-00", label: "689500-00 Web Services" },
     { value: "601600-40", label: "601600-40 Direct Mailers" },
     { value: "601500-40", label: "601500-40 Email MTB" },
+    { value: "603800-40", label: "603800-40 MTB Google Ads" },
+    { value: "603805-00", label: "603805-00 NFMD Google Ads" },
   ];
   const branchOptions = [
     "Michael Todd Beauty", "NasalFresh MD"
@@ -158,7 +160,7 @@ export function DataTableDrawer({
   async function handleSave() {
     if (!datas) return
     setLoading(true)
-    
+
     try {
       const oldVals = {
         category: datas.category,
@@ -173,52 +175,52 @@ export function DataTableDrawer({
         division: datas.division,
         payment_method: datas.payment_method,
       }
-      
+
       // Prepare the update object with proper validation
       const newVals: any = {}
-      
+
       // Helper function to safely trim and validate strings
       const safeString = (value: string | undefined | null) => {
         if (!value) return null
         const trimmed = value.trim()
         return trimmed === "" ? null : trimmed
       }
-      
+
       // Required fields - only update if we have valid values
       if (vendorName && safeString(vendorName)) {
         newVals.vendor_name = safeString(vendorName)
       }
-      
+
       if (glAccount && safeString(glAccount)) {
         newVals.gl_account = safeString(glAccount)
       }
-      
+
       if (branch && safeString(branch)) {
         newVals.branch = safeString(branch)
       }
-      
+
       if (paymentMethod && safeString(paymentMethod)) {
         newVals.payment_method = safeString(paymentMethod)
       }
-      
+
       // Division is required but has a default
       if (division && safeString(division)) {
         newVals.division = safeString(division)
       }
-      
+
       // Optional fields
       if (category !== undefined && safeString(category)) {
         newVals.category = safeString(category)
       }
-      
+
       if (subcategory !== undefined && safeString(subcategory)) {
         newVals.subcategory = safeString(subcategory)
       }
-      
+
       if (description !== undefined) {
         newVals.description = safeString(description)
       }
-      
+
       if (invoiceDate && invoiceDate.trim() !== "") {
         // Convert YYYY-MM-DD to ISO string format
         const date = new Date(invoiceDate.trim())
@@ -226,7 +228,7 @@ export function DataTableDrawer({
           newVals.invoice_date = date.toISOString().split('T')[0] // Keep just the date part
         }
       }
-      
+
       if (dueDate && dueDate.trim() !== "") {
         // Convert YYYY-MM-DD to ISO string format
         const date = new Date(dueDate.trim())
@@ -234,16 +236,16 @@ export function DataTableDrawer({
           newVals.due_date = date.toISOString().split('T')[0] // Keep just the date part
         }
       }
-      
+
       if (amount !== undefined && amount !== "") {
         const parsedAmount = parseFloat(amount)
         if (!isNaN(parsedAmount)) {
           newVals.amount = parsedAmount
         }
       }
-      
+
       console.log("Updating invoice with data:", newVals)
-      
+
       // Check if we have any fields to update
       if (Object.keys(newVals).length === 0) {
         console.log("No fields to update, closing drawer")
@@ -251,13 +253,13 @@ export function DataTableDrawer({
         onOpenChange(false)
         return
       }
-      
+
       // Update the invoice
       const { error: updateError } = await supabase
         .from("invoice_class_invoices")
         .update(newVals)
         .eq("id", datas.id)
-      
+
       if (updateError) {
         console.error("Failed to update invoice:", updateError)
         console.error("Update data that caused error:", newVals)
@@ -266,7 +268,7 @@ export function DataTableDrawer({
         setLoading(false)
         return
       }
-      
+
       // Add audit trail entry
       const { error: auditError } = await supabase
         .from("invoice_class_invoice_audit_trail")
@@ -279,12 +281,12 @@ export function DataTableDrawer({
             after: newVals,
           },
         })
-      
+
       if (auditError) {
         console.error("Failed to create audit trail:", auditError)
         // Don't fail the save operation if audit trail fails
       }
-      
+
       setLoading(false)
       onOpenChange(false)
     } catch (error) {
@@ -566,7 +568,7 @@ function CustomSelect({ value, onValueChange, options, loading, placeholder, lab
         className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm focus-within:border-blue-500 focus-within:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 cursor-pointer flex items-center justify-between"
         tabIndex={0}
         onClick={handleTriggerClick}
-        onKeyDown={e => { if (e.key === "Enter" || e.key === "ArrowDown") { setOpen(true); setTimeout(() => inputRef.current?.focus(), 100) }}}
+        onKeyDown={e => { if (e.key === "Enter" || e.key === "ArrowDown") { setOpen(true); setTimeout(() => inputRef.current?.focus(), 100) } }}
         aria-label={label}
       >
         <span className={value ? "" : "text-gray-400"}>{value || placeholder}</span>
