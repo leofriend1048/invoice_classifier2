@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
 
-async function triggerEndpoint(baseUrl: string, path: string) {
+async function triggerEndpoint(baseUrl: string, path: string, body: any = {}) {
     const apiUrl = `${baseUrl}${path}`;
     console.log(`📡 Triggering endpoint: ${apiUrl}`);
     try {
         const response = await fetch(apiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({}), // Send empty body for POST requests
+            body: JSON.stringify(body),
         });
 
         if (!response.ok) {
@@ -38,11 +38,11 @@ export async function GET() {
       ? `https://${process.env.VERCEL_URL}`
       : 'http://localhost:3000';
 
-    // Task 1: Trigger Gmail Backfill
-    const backfillResult = await triggerEndpoint(baseUrl, '/api/gmail/backfill');
+    // Task 1: Trigger Gmail Backfill (reduced emails for cron timeout limits)
+    const backfillResult = await triggerEndpoint(baseUrl, '/api/gmail/backfill', { maxEmails: 10 });
 
     // Task 2: Trigger Reprocessing of Failed Classifications
-    const reprocessResult = await triggerEndpoint(baseUrl, '/api/reprocess-failed-classifications');
+    const reprocessResult = await triggerEndpoint(baseUrl, '/api/reprocess-failed-classifications', {});
 
     console.log('✅ Daily maintenance cron job completed.');
 
