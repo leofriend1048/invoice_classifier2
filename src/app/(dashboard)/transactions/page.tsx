@@ -2,11 +2,13 @@
 import { getColumns } from "@/app/(dashboard)/transactions/_components/Columns"
 import { DataTable } from "@/app/(dashboard)/transactions/_components/DataTable"
 import { DataTableDrawer } from "@/app/(dashboard)/transactions/_components/DataTableDrawer"
+import { Button } from "@/components/Button"
 import { Invoice } from "@/data/schema"
 import { createClient } from "@supabase/supabase-js"
 import { Row } from "@tanstack/react-table"
-import { AlertCircle } from "lucide-react"
+import { AlertCircle, Mail, RefreshCw } from "lucide-react"
 import { useEffect, useState } from "react"
+import { toast } from "sonner"
 import { DataTableBulkEditor } from "./_components/TableBulkEditor"
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string
@@ -64,7 +66,50 @@ export default function Example() {
   const [error, setError] = useState<string | null>(null)
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({})
   const [tableInstance, setTableInstance] = useState<any>(null)
+  const [isProcessingEmails, setIsProcessingEmails] = useState(false)
   const datas = row?.original
+
+  // Function to trigger Gmail backfill
+  const handleProcessNewEmails = async () => {
+    setIsProcessingEmails(true)
+    toast.loading("Processing new emails...", { 
+      id: "gmail-backfill",
+      description: "Scanning Gmail for new invoices"
+    })
+
+    try {
+      const response = await fetch('/api/gmail/backfill', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ maxEmails: 100 }),
+      })
+
+      const result = await response.json()
+
+      if (response.ok && result.success) {
+        const stats = result.stats || {}
+        const processed = stats.newlyProcessed || 0
+        const total = stats.totalMessages || 0
+        
+        toast.success("Email processing completed!", {
+          id: "gmail-backfill",
+          description: `Processed ${processed} new invoices out of ${total} emails checked.`
+        })
+      } else {
+        throw new Error(result.error || 'Failed to process emails')
+      }
+    } catch (error) {
+      console.error('Email processing error:', error)
+      toast.error("Failed to process emails", {
+        id: "gmail-backfill",
+        description: error instanceof Error ? error.message : 'Unknown error occurred'
+      })
+    } finally {
+      setIsProcessingEmails(false)
+    }
+  }
 
   useEffect(() => {
     let ignore = false
@@ -159,9 +204,24 @@ export default function Example() {
 
   return (
     <>
-      <h1 className="text-lg font-semibold text-gray-900 sm:text-xl dark:text-gray-50">
-        Invoices
-      </h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-lg font-semibold text-gray-900 sm:text-xl dark:text-gray-50">
+          Invoices
+        </h1>
+        <Button
+          onClick={handleProcessNewEmails}
+          disabled={isProcessingEmails}
+          variant="primary"
+          className="flex items-center gap-2"
+        >
+          {isProcessingEmails ? (
+            <RefreshCw className="h-4 w-4 animate-spin" />
+          ) : (
+            <Mail className="h-4 w-4" />
+          )}
+          {isProcessingEmails ? "Processing..." : "Process New Emails"}
+        </Button>
+      </div>
       <div className="mt-4 sm:mt-6 lg:mt-10">
         {loading ? (
           <TableSkeleton />

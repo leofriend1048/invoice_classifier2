@@ -1,4 +1,5 @@
 import { SessionProvider } from "@/components/auth/SessionProvider"
+import { Toaster } from "@/components/ui/sonner"
 import { GeistSans } from "geist/font/sans"
 import type { Metadata } from "next"
 import { ThemeProvider } from "next-themes"
@@ -50,6 +51,7 @@ export default function RootLayout({
           <SessionProvider>
             <NuqsAdapter>
               <div>{children}</div>
+              <Toaster />
             </NuqsAdapter>
           </SessionProvider>
         </ThemeProvider>
