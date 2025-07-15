@@ -6,7 +6,11 @@ async function triggerEndpoint(baseUrl: string, path: string, body: any = {}) {
     try {
         const response = await fetch(apiUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'x-vercel-cron': '1',
+                'user-agent': 'vercel-cron internal-call'
+            },
             body: JSON.stringify(body),
         });
 
