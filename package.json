@@ -55,6 +55,7 @@
     "react-dropzone": "^14.3.8",
     "recharts": "^2.15.1",
     "resend": "^4.5.2",
+    "sonner": "^2.0.6",
     "tailwind-merge": "^2.6.0",
     "tailwind-variants": "^0.3.1",
     "tsx": "^4.19.3",
