@@ -321,16 +321,17 @@ export function DataTableDrawer({
     setIsUploadingPdf(true)
     setUploadProgress(0)
 
+    let progressInterval: NodeJS.Timeout | null = null
+
     try {
       const formData = new FormData()
       formData.append('file', file)
       formData.append('invoiceId', datas.id)
 
       // Simulate progress for better UX
-      const progressInterval = setInterval(() => {
+      progressInterval = setInterval(() => {
         setUploadProgress(prev => {
           if (prev >= 90) {
-            clearInterval(progressInterval)
             return prev
           }
           return prev + 10
@@ -342,18 +343,28 @@ export function DataTableDrawer({
         body: formData,
       })
 
-      clearInterval(progressInterval)
-      setUploadProgress(100)
-
       const result = await response.json()
 
       if (!response.ok) {
         throw new Error(result.error || 'Upload failed')
       }
 
-      // Update the current PDF URL with the new one
-      setCurrentPdfUrl(result.data.pdf_url)
+      // Clear interval and set progress to 100%
+      if (progressInterval) {
+        clearInterval(progressInterval)
+        progressInterval = null
+      }
+      setUploadProgress(100)
+
+      // Update both local state and optimistically update the datas object
+      const newPdfUrl = result.data.pdf_url
+      setCurrentPdfUrl(newPdfUrl)
       
+      // Optimistically update the parent data to prevent state loss on drawer reopen
+      if (datas) {
+        datas.pdf_url = newPdfUrl
+      }
+
       // Show success message
       toast.success('PDF uploaded successfully!')
 
@@ -364,6 +375,10 @@ export function DataTableDrawer({
       console.error('PDF upload error:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to upload PDF')
     } finally {
+      // Ensure interval is always cleared
+      if (progressInterval) {
+        clearInterval(progressInterval)
+      }
       setIsUploadingPdf(false)
       setUploadProgress(0)
     }
