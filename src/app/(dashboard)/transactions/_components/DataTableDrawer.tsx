@@ -20,6 +20,7 @@ import { formatters } from "@/lib/utils"
 import { createClient } from "@supabase/supabase-js"
 import { format } from "date-fns"
 import React, { useEffect, useState } from "react"
+import { toast } from "sonner"
 
 interface DataTableDrawerProps {
   open: boolean
@@ -52,6 +53,9 @@ export function DataTableDrawer({
   const [division, setDivision] = useState("Ecommerce")
   const [paymentMethod, setPaymentMethod] = useState("")
   const [isPaid, setIsPaid] = useState(false)
+  const [isUploadingPdf, setIsUploadingPdf] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [currentPdfUrl, setCurrentPdfUrl] = useState("")
 
   const glAccountOptions = [
     { value: "618000-00", label: "618000-00 Software Subscription Fees" },
@@ -104,6 +108,7 @@ export function DataTableDrawer({
       setDivision(datas.division || suggestion.division || "Ecommerce")
       setPaymentMethod(datas.payment_method || suggestion.payment_method || "")
       setIsPaid(!!datas.is_paid)
+      setCurrentPdfUrl(datas.pdf_url || "")
     }
   }, [datas, open])
 
@@ -296,6 +301,74 @@ export function DataTableDrawer({
     }
   }
 
+  const handlePdfUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file || !datas?.id) return
+
+    // Validate file type
+    if (file.type !== 'application/pdf') {
+      toast.error('Please select a PDF file.')
+      return
+    }
+
+    // Validate file size (10MB max)
+    const maxSize = 10 * 1024 * 1024 // 10MB
+    if (file.size > maxSize) {
+      toast.error('File size must be less than 10MB.')
+      return
+    }
+
+    setIsUploadingPdf(true)
+    setUploadProgress(0)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('invoiceId', datas.id)
+
+      // Simulate progress for better UX
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => {
+          if (prev >= 90) {
+            clearInterval(progressInterval)
+            return prev
+          }
+          return prev + 10
+        })
+      }, 200)
+
+      const response = await fetch('/api/upload-pdf', {
+        method: 'POST',
+        body: formData,
+      })
+
+      clearInterval(progressInterval)
+      setUploadProgress(100)
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Upload failed')
+      }
+
+      // Update the current PDF URL with the new one
+      setCurrentPdfUrl(result.data.pdf_url)
+      
+      // Show success message
+      toast.success('PDF uploaded successfully!')
+
+      // Reset the file input
+      event.target.value = ''
+
+    } catch (error) {
+      console.error('PDF upload error:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to upload PDF')
+    } finally {
+      setIsUploadingPdf(false)
+      setUploadProgress(0)
+    }
+  }
+
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
       {datas ? (
@@ -334,11 +407,9 @@ export function DataTableDrawer({
                 <TabsTrigger value="extracted" className="px-4">
                   Extracted Text
                 </TabsTrigger>
-                {datas.pdf_url && (
-                  <TabsTrigger value="pdf" className="px-4">
-                    PDF
-                  </TabsTrigger>
-                )}
+                <TabsTrigger value="pdf" className="px-4">
+                  PDF
+                </TabsTrigger>
               </TabsList>
               <TabsContent value="details" className="space-y-6 px-6">
                 <form className="mt-6 grid grid-cols-2 gap-4">
@@ -498,18 +569,63 @@ export function DataTableDrawer({
                   </div>
                 </div>
               </TabsContent>
-              {datas.pdf_url && (
-                <TabsContent value="pdf" className="space-y-6 px-6">
-                  <div className="mt-6">
-                    <Label className="font-medium">PDF Preview</Label>
-                    <iframe
-                      src={datas.pdf_url}
-                      title="Invoice PDF"
-                      className="mt-2 w-full h-96 rounded border border-gray-200 dark:border-gray-800"
-                    />
+              <TabsContent value="pdf" className="space-y-6 px-6">
+                <div className="mt-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <Label className="font-medium">PDF Document</Label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="file"
+                        accept=".pdf"
+                        onChange={handlePdfUpload}
+                        disabled={isUploadingPdf}
+                        className="hidden"
+                        id="pdf-upload"
+                      />
+                      <label
+                        htmlFor="pdf-upload"
+                        className={`cursor-pointer inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 ${isUploadingPdf ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        {isUploadingPdf ? 'Uploading...' : (datas.pdf_url || currentPdfUrl) ? 'Replace PDF' : 'Upload PDF'}
+                      </label>
+                    </div>
                   </div>
-                </TabsContent>
-              )}
+                  
+                  {isUploadingPdf && (
+                    <div className="mb-4">
+                      <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400 mb-1">
+                        <span>Uploading PDF...</span>
+                        <span>{uploadProgress}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
+                        <div 
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                          style={{ width: `${uploadProgress}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {(datas.pdf_url || currentPdfUrl) ? (
+                    <iframe
+                      src={currentPdfUrl || datas.pdf_url}
+                      title="Invoice PDF"
+                      className="w-full h-96 rounded border border-gray-200 dark:border-gray-800"
+                      key={currentPdfUrl || datas.pdf_url} // Force reload when URL changes
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-96 border border-dashed border-gray-300 rounded-lg bg-gray-50 dark:border-gray-600 dark:bg-gray-800">
+                      <div className="text-center">
+                        <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
+                          <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                        <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">No PDF document</h3>
+                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Upload a PDF file to view it here.</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
             </Tabs>
           </DrawerBody>
           <DrawerFooter className="-mx-6 -mb-2 gap-2 bg-white px-6 dark:bg-gray-925">
