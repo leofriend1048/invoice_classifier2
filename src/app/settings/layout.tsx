@@ -12,6 +12,7 @@ import { siteConfig } from "../siteConfig"
 const navigationSettings = [
   { name: "Categorization", href: "/settings/categorization" },
   { name: "Users", href: siteConfig.baseLinks.settings.users },
+  { name: "API", href: "/settings/api" },
 ]
 
 export default function Layout({

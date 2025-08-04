@@ -2,25 +2,25 @@
 
 import { Button } from "@/components/Button"
 import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
+    Dialog,
+    DialogClose,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
 } from "@/components/Dialog"
 import { Input } from "@/components/Input"
 import { Label } from "@/components/Label"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeaderCell,
-  TableRoot,
-  TableRow,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeaderCell,
+    TableRoot,
+    TableRow,
 } from "@/components/Table"
 import { authClient } from "@/lib/auth-client"
 import { getFullUrl } from "@/lib/url-utils"
@@ -37,7 +37,6 @@ export default function Users() {
   const [googleEmail, setGoogleEmail] = useState('');
   const [googleStatus, setGoogleStatus] = useState<'connected' | 'not_connected' | 'loading'>('not_connected');
   const [showSuccess, setShowSuccess] = useState(false);
-  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
 
   // On mount, load last used email from localStorage and check status ONCE
   useEffect(() => {
@@ -47,12 +46,15 @@ export default function Users() {
       checkGoogleStatus(lastEmail);
     }
     // Show success message if redirected from OAuth
-    if (searchParams && searchParams.get('google_connected') === '1') {
-      setShowSuccess(true);
-      // Remove the param from the URL after showing
-      const url = new URL(window.location.href);
-      url.searchParams.delete('google_connected');
-      window.history.replaceState({}, '', url.pathname + url.search);
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      if (searchParams.get('google_connected') === '1') {
+        setShowSuccess(true);
+        // Remove the param from the URL after showing
+        const url = new URL(window.location.href);
+        url.searchParams.delete('google_connected');
+        window.history.replaceState({}, '', url.pathname + url.search);
+      }
     }
   }, []); // Only run on mount
 

@@ -16,15 +16,16 @@ export function Filterbar<TData>({ table }: { table: Table<TData> }) {
   const [searchTerm, setSearchTerm] = useState("")
 
   // Dynamically get unique category options from the table data
+  const preFilteredRows = table.getPreFilteredRowModel().rows
   const categoryOptions = useMemo(() => {
     const col = table.getColumn("category")
     if (!col) return []
-    const values = table.getPreFilteredRowModel().rows
+    const values = preFilteredRows
       .map(row => row.getValue("category"))
       .filter(Boolean) as string[]
     const unique = Array.from(new Set(values))
     return unique.map((cat) => ({ label: cat, value: cat }))
-  }, [table.getPreFilteredRowModel().rows])
+  }, [table, preFilteredRows])
 
   function handleSearchChange(e: React.ChangeEvent<HTMLInputElement>) {
     setSearchTerm(e.target.value)
