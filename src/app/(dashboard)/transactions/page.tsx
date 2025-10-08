@@ -3,10 +3,12 @@ import { getColumns } from "@/app/(dashboard)/transactions/_components/Columns"
 import { DataTable } from "@/app/(dashboard)/transactions/_components/DataTable"
 import { DataTableDrawer } from "@/app/(dashboard)/transactions/_components/DataTableDrawer"
 import { Button } from "@/components/Button"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/Dialog"
+import DragDropUpload from "@/components/DragDropUpload"
 import { Invoice } from "@/data/schema"
 import { createClient } from "@supabase/supabase-js"
 import { Row } from "@tanstack/react-table"
-import { AlertCircle, Mail, RefreshCw } from "lucide-react"
+import { AlertCircle, Mail, RefreshCw, Upload, X } from "lucide-react"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { DataTableBulkEditor } from "./_components/TableBulkEditor"
@@ -67,6 +69,7 @@ export default function Example() {
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({})
   const [tableInstance, setTableInstance] = useState<any>(null)
   const [isProcessingEmails, setIsProcessingEmails] = useState(false)
+  const [showUploadModal, setShowUploadModal] = useState(false)
   const datas = row?.original
 
   // Function to trigger Gmail backfill
@@ -109,6 +112,13 @@ export default function Example() {
     } finally {
       setIsProcessingEmails(false)
     }
+  }
+
+  // Function to handle upload completion
+  const handleUploadComplete = (uploadedInvoices: any[]) => {
+    console.log('Upload completed:', uploadedInvoices)
+    setShowUploadModal(false)
+    // The realtime subscription will automatically update the invoices list
   }
 
   useEffect(() => {
@@ -208,19 +218,29 @@ export default function Example() {
         <h1 className="text-lg font-semibold text-gray-900 sm:text-xl dark:text-gray-50">
           Invoices
         </h1>
-        <Button
-          onClick={handleProcessNewEmails}
-          disabled={isProcessingEmails}
-          variant="primary"
-          className="flex items-center gap-2"
-        >
-          {isProcessingEmails ? (
-            <RefreshCw className="h-4 w-4 animate-spin" />
-          ) : (
-            <Mail className="h-4 w-4" />
-          )}
-          {isProcessingEmails ? "Processing..." : "Process New Emails"}
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={() => setShowUploadModal(true)}
+            variant="secondary"
+            className="flex items-center gap-2"
+          >
+            <Upload className="h-4 w-4" />
+            Upload PDFs
+          </Button>
+          <Button
+            onClick={handleProcessNewEmails}
+            disabled={isProcessingEmails}
+            variant="primary"
+            className="flex items-center gap-2"
+          >
+            {isProcessingEmails ? (
+              <RefreshCw className="h-4 w-4 animate-spin" />
+            ) : (
+              <Mail className="h-4 w-4" />
+            )}
+            {isProcessingEmails ? "Processing..." : "Process New Emails"}
+          </Button>
+        </div>
       </div>
       <div className="mt-4 sm:mt-6 lg:mt-10">
         {loading ? (
@@ -240,6 +260,27 @@ export default function Example() {
       {tableInstance && !loading && (
         <DataTableBulkEditor table={tableInstance} rowSelection={rowSelection} />
       )}
+
+      {/* Upload Modal */}
+      <Dialog open={showUploadModal} onOpenChange={setShowUploadModal}>
+        <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between">
+              <span>Upload PDF Invoices</span>
+              <Button
+                variant="light"
+                onClick={() => setShowUploadModal(false)}
+                className="p-1 h-8 w-8"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mt-4">
+            <DragDropUpload onUploadComplete={handleUploadComplete} />
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
