@@ -13,6 +13,8 @@ import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { DataTableBulkEditor } from "./_components/TableBulkEditor"
 
+// Transactions page with drag-and-drop PDF upload functionality
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string
 const supabase = createClient(supabaseUrl, supabaseAnonKey)

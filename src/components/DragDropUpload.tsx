@@ -5,6 +5,8 @@ import { AlertCircle, CheckCircle, FileText, Upload, X } from "lucide-react"
 import { useCallback, useRef, useState } from "react"
 import { toast } from "sonner"
 
+// DragDropUpload component for PDF file uploads with drag-and-drop functionality
+
 interface UploadedFile {
   id: string
   file: File

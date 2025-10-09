@@ -6,6 +6,8 @@ import { createSafeUniqueFilename } from '@/lib/url-utils';
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 
+// API endpoint for direct PDF uploads with robust error handling and retry logic
+
 export async function POST(req: NextRequest) {
   let invoiceRecord: any = null;
   let pdfUrl: string | null = null;
