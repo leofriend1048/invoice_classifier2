@@ -6,6 +6,7 @@ import { useCallback, useRef, useState } from "react"
 import { toast } from "sonner"
 
 // DragDropUpload component for PDF file uploads with drag-and-drop functionality
+// Supports multiple file uploads with real-time progress tracking
 
 interface UploadedFile {
   id: string
