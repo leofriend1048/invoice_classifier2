@@ -1,8 +1,14 @@
 import { categories, subcategories, subcategoryDescriptions } from "@/data/schema";
 import OpenAI from 'openai';
 
+// Enhanced OpenAI client configuration for production resilience
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
+  timeout: 120000, // 2 minutes timeout for the client
+  maxRetries: 3,
+  defaultHeaders: {
+    'User-Agent': 'invoice-classifier/1.0'
+  }
 });
 
 // JSON Schema for invoice extraction
@@ -97,105 +103,142 @@ export async function extractInvoiceDataWithGPT4o(
   amount?: number;
   extracted_text?: string;
 } | null> {
-  try {
-    console.log('🤖 Starting GPT-4o document processing...');
-    console.log('📄 File URL:', fileUrl);
-    console.log('🔑 OpenAI API Key present:', !!process.env.OPENAI_API_KEY);
-
-    if (!process.env.OPENAI_API_KEY) {
-      console.error('❌ OpenAI API key is missing');
-      return null;
-    }
-
-    // Download the file content
-    console.log('📥 Downloading file content...');
-    const fileResponse = await fetch(fileUrl);
-
-    if (!fileResponse.ok) {
-      console.error('❌ Failed to download file:', fileResponse.status);
-      return null;
-    }
-
-    const fileBuffer = await fileResponse.arrayBuffer();
-    const base64String = Buffer.from(fileBuffer).toString('base64');
-    const contentType = fileResponse.headers.get('content-type') || 'application/pdf';
-
-    console.log('📊 File downloaded successfully');
-    console.log('📋 Content type:', contentType);
-    console.log('📦 File size:', fileBuffer.byteLength, 'bytes');
-
-    console.log('📤 Sending document to OpenAI GPT-4o with structured output...');
-
-    // Use structured outputs to ensure valid JSON response
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: `Please analyze this invoice document (PDF) and extract the following information. If any field cannot be determined, set it to null. For dates, convert to YYYY-MM-DD format. For amount, extract only the final total as a number.`
-            },
-            {
-              type: "file",
-              file: {
-                filename: "invoice.pdf",
-                file_data: `data:${contentType};base64,${base64String}`
-              }
-            }
-          ]
-        }
-      ],
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "invoice_extraction",
-          schema: invoiceExtractionSchema,
-          strict: true
-        }
-      },
-      max_tokens: 1500,
-      temperature: 0.1
-    });
-
-    console.log('✅ Received structured response from OpenAI');
-    const content = response.choices[0]?.message?.content;
-    console.log('📝 Response content:', content);
-
-    if (!content) {
-      console.error('❌ No content in OpenAI response');
-      return null;
-    }
-
-    // With structured outputs, we should always get valid JSON
+  const maxRetries = 3;
+  let attempt = 0;
+  
+  while (attempt < maxRetries) {
     try {
-      const extractedData = JSON.parse(content);
-      console.log('✅ Successfully parsed extracted data:', extractedData);
-      return extractedData;
-    } catch (parseError) {
-      console.error('❌ Failed to parse structured response (this should not happen):', parseError);
-      console.error('📄 Raw response:', content);
-      return null;
+      console.log(`🤖 Starting GPT-4o document processing (attempt ${attempt + 1}/${maxRetries})...`);
+      console.log('📄 File URL:', fileUrl);
+      console.log('🔑 OpenAI API Key present:', !!process.env.OPENAI_API_KEY);
+
+      if (!process.env.OPENAI_API_KEY) {
+        console.error('❌ OpenAI API key is missing');
+        return null;
+      }
+
+      // Download the file content with timeout
+      console.log('📥 Downloading file content...');
+      const downloadController = new AbortController();
+      const downloadTimeout = setTimeout(() => downloadController.abort(), 30000); // 30s download timeout
+      
+      let fileResponse: Response;
+      try {
+        fileResponse = await fetch(fileUrl, {
+          signal: downloadController.signal,
+          headers: {
+            'User-Agent': 'invoice-classifier/1.0'
+          }
+        });
+        clearTimeout(downloadTimeout);
+      } catch (fetchError) {
+        clearTimeout(downloadTimeout);
+        throw fetchError;
+      }
+
+      if (!fileResponse.ok) {
+        throw new Error(`Failed to download file: ${fileResponse.status} ${fileResponse.statusText}`);
+      }
+
+      const fileBuffer = await fileResponse.arrayBuffer();
+      const base64String = Buffer.from(fileBuffer).toString('base64');
+      const contentType = fileResponse.headers.get('content-type') || 'application/pdf';
+
+      console.log('📊 File downloaded successfully');
+      console.log('📋 Content type:', contentType);
+      console.log('📦 File size:', fileBuffer.byteLength, 'bytes');
+
+      // Validate file size (max 20MB for OpenAI)
+      if (fileBuffer.byteLength > 20 * 1024 * 1024) {
+        throw new Error('File too large for OpenAI processing (max 20MB)');
+      }
+
+      console.log('📤 Sending document to OpenAI GPT-4o with structured output...');
+
+      // Use structured outputs to ensure valid JSON response with timeout
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `Please analyze this invoice document (PDF) and extract the following information. If any field cannot be determined, set it to null. For dates, convert to YYYY-MM-DD format. For amount, extract only the final total as a number.`
+              },
+              {
+                type: "file",
+                file: {
+                  filename: "invoice.pdf",
+                  file_data: `data:${contentType};base64,${base64String}`
+                }
+              }
+            ]
+          }
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "invoice_extraction",
+            schema: invoiceExtractionSchema,
+            strict: true
+          }
+        },
+        max_tokens: 1500,
+        temperature: 0.1
+      });
+
+      console.log('✅ Received structured response from OpenAI');
+      const content = response.choices[0]?.message?.content;
+      console.log('📝 Response content:', content);
+
+      if (!content) {
+        throw new Error('No content in OpenAI response');
+      }
+
+      // With structured outputs, we should always get valid JSON
+      try {
+        const extractedData = JSON.parse(content);
+        console.log('✅ Successfully parsed extracted data:', extractedData);
+        return extractedData;
+      } catch (parseError) {
+        console.error('❌ Failed to parse structured response (this should not happen):', parseError);
+        console.error('📄 Raw response:', content);
+        throw new Error('Invalid JSON response from OpenAI');
+      }
+
+    } catch (error) {
+      attempt++;
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`💥 GPT-4o processing error (attempt ${attempt}/${maxRetries}):`, errorMessage);
+
+      // More detailed error logging
+      if (error instanceof Error) {
+        console.error('❌ Error name:', error.name);
+        console.error('❌ Error message:', error.message);
+        if (attempt === maxRetries) {
+          console.error('❌ Error stack:', error.stack);
+        }
+      }
+
+      // Check if it's an OpenAI API error
+      if (error && typeof error === 'object' && 'error' in error) {
+        console.error('🔥 OpenAI API Error:', (error as { error: unknown }).error);
+      }
+
+      if (attempt >= maxRetries) {
+        console.error('💥 Failed to extract data after all retry attempts');
+        return null;
+      }
+      
+      // Exponential backoff with jitter
+      const delay = Math.min(2000 * Math.pow(2, attempt - 1) + Math.random() * 1000, 10000);
+      console.log(`⏳ Waiting ${Math.round(delay)}ms before retry...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
     }
-
-  } catch (error) {
-    console.error('💥 GPT-4o processing error:', error);
-
-    // More detailed error logging
-    if (error instanceof Error) {
-      console.error('❌ Error name:', error.name);
-      console.error('❌ Error message:', error.message);
-      console.error('❌ Error stack:', error.stack);
-    }
-
-    // Check if it's an OpenAI API error
-    if (error && typeof error === 'object' && 'error' in error) {
-      console.error('🔥 OpenAI API Error:', (error as { error: unknown }).error);
-    }
-
-    return null;
   }
+  
+  return null;
 }
 
 export async function classifyInvoiceWithGPT4o(

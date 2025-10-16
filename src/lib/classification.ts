@@ -64,16 +64,46 @@ export async function classifyInvoice(
   });
 
   try {
-    // Step 0: Fetch unique categories/subcategories from non-pending invoices
+    // Step 0: Fetch unique categories/subcategories from non-pending invoices with retry
     console.log('📊 Fetching historical classification data...');
-    const { data: catData, error: catError } = await supabaseServer
-      .from('invoice_class_invoices')
-      .select('category, subcategory, status, vendor_name')
-      .neq('status', 'pending');
+    let catData: any[] | null = null;
+    let catError: any = null;
+    const maxRetries = 3;
+    let attempt = 0;
+    
+    while (attempt < maxRetries && !catData && !catError) {
+      try {
+        const result = await supabaseServer
+          .from('invoice_class_invoices')
+          .select('category, subcategory, status, vendor_name')
+          .neq('status', 'pending');
+        
+        catData = result.data;
+        catError = result.error;
+        
+        if (catError) {
+          throw catError;
+        }
+        
+        break;
+      } catch (error) {
+        attempt++;
+        console.warn(`⚠️ Historical data fetch attempt ${attempt}/${maxRetries} failed:`, error);
+        
+        if (attempt >= maxRetries) {
+          catError = error;
+          break;
+        }
+        
+        // Wait before retry
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      }
+    }
 
     if (catError) {
-      console.error('❌ Failed to fetch historical data:', catError);
-      throw catError;
+      console.error('❌ Failed to fetch historical data after retries:', catError);
+      // Continue without historical data rather than failing completely
+      catData = [];
     }
 
     let uniqueCategories: string[] = [];
@@ -94,65 +124,108 @@ export async function classifyInvoice(
         subcategory: lastVendorInvoice.subcategory
       });
 
-      // Use vendor's last category/subcategory, but generate new description
-      const gptDesc = await classifyInvoiceWithGPT4o(
-        vendorName,
-        amount,
-        extractedText,
-        uniqueCategories,
-        lastVendorInvoice.category,
-        lastVendorInvoice.subcategory,
-        true // description only
-      );
+      // Use vendor's last category/subcategory, but generate new description with timeout
+      try {
+        const gptDesc = await Promise.race([
+          classifyInvoiceWithGPT4o(
+            vendorName,
+            amount,
+            extractedText,
+            uniqueCategories,
+            lastVendorInvoice.category,
+            lastVendorInvoice.subcategory,
+            true // description only
+          ),
+          new Promise<null>((_, reject) => 
+            setTimeout(() => reject(new Error('Description generation timeout')), 15000)
+          )
+        ]);
 
-      if (!gptDesc) {
-        console.warn('⚠️ Failed to get description from GPT-4o, using fallback');
+        if (!gptDesc) {
+          console.warn('⚠️ Failed to get description from GPT-4o, using fallback');
+        }
+
+        return {
+          category: lastVendorInvoice.category,
+          subcategory: lastVendorInvoice.subcategory,
+          description: gptDesc?.description || '',
+          confidence: 0.95,
+          method: 'vendor',
+          gl_account: gptDesc?.gl_account,
+          branch: gptDesc?.branch,
+          division: gptDesc?.division,
+          payment_method: gptDesc?.payment_method,
+        };
+      } catch (descError) {
+        console.warn('⚠️ Description generation failed, using fallback:', descError);
+        return {
+          category: lastVendorInvoice.category,
+          subcategory: lastVendorInvoice.subcategory,
+          description: `Invoice from ${vendorName} for $${amount}`,
+          confidence: 0.9,
+          method: 'vendor',
+          gl_account: null,
+          branch: null,
+          division: 'Ecommerce',
+          payment_method: null,
+        };
       }
-
-      return {
-        category: lastVendorInvoice.category,
-        subcategory: lastVendorInvoice.subcategory,
-        description: gptDesc?.description || '',
-        confidence: 0.95,
-        method: 'vendor',
-        gl_account: gptDesc?.gl_account,
-        branch: gptDesc?.branch,
-        division: gptDesc?.division,
-        payment_method: gptDesc?.payment_method,
-      };
     }
 
-    // Step 2: Pattern-based classification
+    // Step 2: Pattern-based classification with timeout
     console.log('📋 Attempting pattern-based classification...');
-    const patternResult = await classifyWithPatterns(vendorName, amount, extractedText);
-    if (patternResult) {
-      console.log('🎯 Found matching pattern:', {
-        category: patternResult.category,
-        subcategory: patternResult.subcategory,
-        confidence: patternResult.confidence,
-        pattern_id: patternResult.pattern_id
-      });
-    } else {
-      console.log('📝 No matching patterns found');
+    let patternResult: ClassificationResult | null = null;
+    try {
+      patternResult = await Promise.race([
+        classifyWithPatterns(vendorName, amount, extractedText),
+        new Promise<null>((_, reject) => 
+          setTimeout(() => reject(new Error('Pattern classification timeout')), 10000)
+        )
+      ]);
+      
+      if (patternResult) {
+        console.log('🎯 Found matching pattern:', {
+          category: patternResult.category,
+          subcategory: patternResult.subcategory,
+          confidence: patternResult.confidence,
+          pattern_id: patternResult.pattern_id
+        });
+      } else {
+        console.log('📝 No matching patterns found');
+      }
+    } catch (patternError) {
+      console.warn('⚠️ Pattern classification failed:', patternError);
+      patternResult = null;
     }
     
-    // Step 3: Get GPT-4o classification
+    // Step 3: Get GPT-4o classification with timeout
     console.log('🤖 Getting GPT-4o classification...');
-    const gptResult = await classifyInvoiceWithGPT4o(
-      vendorName,
-      amount,
-      extractedText,
-      uniqueCategories
-    );
+    let gptResult: any = null;
+    try {
+      gptResult = await Promise.race([
+        classifyInvoiceWithGPT4o(
+          vendorName,
+          amount,
+          extractedText,
+          uniqueCategories
+        ),
+        new Promise<null>((_, reject) => 
+          setTimeout(() => reject(new Error('GPT classification timeout')), 30000)
+        )
+      ]);
 
-    if (gptResult) {
-      console.log('🎉 GPT-4o classification successful:', {
-        category: gptResult.category,
-        subcategory: gptResult.subcategory,
-        confidence: gptResult.confidence
-      });
-    } else {
-      console.error('❌ GPT-4o classification failed');
+      if (gptResult) {
+        console.log('🎉 GPT-4o classification successful:', {
+          category: gptResult.category,
+          subcategory: gptResult.subcategory,
+          confidence: gptResult.confidence
+        });
+      } else {
+        console.error('❌ GPT-4o classification failed');
+      }
+    } catch (gptError) {
+      console.warn('⚠️ GPT classification failed:', gptError);
+      gptResult = null;
     }
     
     // Step 4: Apply hybrid logic

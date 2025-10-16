@@ -1,10 +1,17 @@
 export const dynamic = "force-dynamic";
 import { classifyInvoice, updateVendorProfile } from '@/lib/classification';
 import { extractInvoiceDataWithGPT4o } from '@/lib/openai';
+import '@/lib/server-init'; // Initialize process error handlers
 import { insertInvoice, supabaseServer, uploadFileToStorage } from '@/lib/supabase-server';
 import { createSafeUniqueFilename } from '@/lib/url-utils';
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
+
+// Enhanced timeout configuration
+const EXTRACTION_TIMEOUT = 60000; // 60 seconds for complex PDFs
+const CLASSIFICATION_TIMEOUT = 30000; // 30 seconds for classification
+const MAX_RETRIES = 3;
+const RETRY_DELAY_BASE = 2000; // Base delay for exponential backoff
 
 // API endpoint for direct PDF uploads with robust error handling and retry logic
 
@@ -140,18 +147,17 @@ export async function POST(req: NextRequest) {
 
     console.log('💾 Created invoice record:', invoiceRecord.id);
 
-    // Extract data using GPT-4o with timeout and retry logic
+    // Extract data using GPT-4o with enhanced timeout and retry logic
     console.log('🤖 Extracting invoice data with GPT-4o...');
     let extractedData: any = null;
     let extractionAttempts = 0;
-    const maxExtractionAttempts = 2;
     
-    while (extractionAttempts < maxExtractionAttempts && !extractedData) {
+    while (extractionAttempts < MAX_RETRIES && !extractedData) {
       try {
-        // Add timeout to prevent hanging
+        // Enhanced timeout handling with proper cleanup
         const extractionPromise = extractInvoiceDataWithGPT4o(pdfUrl);
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Extraction timeout')), 30000) // 30 second timeout
+        const timeoutPromise = new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error(`Extraction timeout after ${EXTRACTION_TIMEOUT}ms`)), EXTRACTION_TIMEOUT)
         );
         
         extractedData = await Promise.race([extractionPromise, timeoutPromise]);
@@ -162,13 +168,17 @@ export async function POST(req: NextRequest) {
         }
       } catch (extractionError) {
         extractionAttempts++;
-        console.warn(`⚠️ Extraction attempt ${extractionAttempts} failed:`, extractionError);
+        const errorMessage = extractionError instanceof Error ? extractionError.message : 'Unknown extraction error';
+        console.warn(`⚠️ Extraction attempt ${extractionAttempts}/${MAX_RETRIES} failed:`, errorMessage);
         
-        if (extractionAttempts >= maxExtractionAttempts) {
+        if (extractionAttempts >= MAX_RETRIES) {
           console.warn('⚠️ Failed to extract data from PDF after multiple attempts, proceeding with default values');
+          break;
         } else {
-          // Wait before retry
-          await new Promise(resolve => setTimeout(resolve, 2000 * extractionAttempts));
+          // Exponential backoff with jitter
+          const delay = RETRY_DELAY_BASE * Math.pow(2, extractionAttempts - 1) + Math.random() * 1000;
+          console.log(`⏳ Waiting ${Math.round(delay)}ms before retry...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
     }
@@ -176,45 +186,103 @@ export async function POST(req: NextRequest) {
     // Process classification if we have extracted data
     if (extractedData) {
       try {
-        // Classify the invoice with timeout
-        const classificationPromise = classifyInvoice(
-          extractedData.vendor_name || initialInvoiceData.vendor_name,
-          extractedData.amount || 0,
-          extractedData.extracted_text || ''
-        );
-        const classificationTimeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Classification timeout')), 20000) // 20 second timeout
-        );
+        // Classify the invoice with enhanced timeout and retry logic
+        let classification: any = null;
+        let classificationAttempts = 0;
         
-        const classification = await Promise.race([classificationPromise, classificationTimeoutPromise]) as any;
+        while (classificationAttempts < MAX_RETRIES && !classification) {
+          try {
+            const classificationPromise = classifyInvoice(
+              extractedData.vendor_name || initialInvoiceData.vendor_name,
+              extractedData.amount || 0,
+              extractedData.extracted_text || ''
+            );
+            const classificationTimeoutPromise = new Promise<never>((_, reject) => 
+              setTimeout(() => reject(new Error(`Classification timeout after ${CLASSIFICATION_TIMEOUT}ms`)), CLASSIFICATION_TIMEOUT)
+            );
+            
+            classification = await Promise.race([classificationPromise, classificationTimeoutPromise]);
+            
+            if (classification) {
+              console.log('✅ Classification completed successfully');
+              break;
+            }
+          } catch (classificationError) {
+            classificationAttempts++;
+            const errorMessage = classificationError instanceof Error ? classificationError.message : 'Unknown classification error';
+            console.warn(`⚠️ Classification attempt ${classificationAttempts}/${MAX_RETRIES} failed:`, errorMessage);
+            
+            if (classificationAttempts >= MAX_RETRIES) {
+              console.warn('⚠️ Failed to classify invoice after multiple attempts, using fallback values');
+              // Use fallback classification
+              classification = {
+                category: 'Business Services',
+                subcategory: 'Other',
+                description: 'Requires manual classification',
+                gl_account: null,
+                branch: null,
+                division: 'Ecommerce',
+                payment_method: null,
+                confidence: 0.3
+              };
+              break;
+            } else {
+              // Exponential backoff
+              const delay = RETRY_DELAY_BASE * Math.pow(2, classificationAttempts - 1) + Math.random() * 1000;
+              console.log(`⏳ Waiting ${Math.round(delay)}ms before classification retry...`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+            }
+          }
+        }
 
-        // Update invoice with extracted data and classification
-        const updateData = {
-          ...extractedData,
-          category: classification.category,
-          subcategory: classification.subcategory,
-          description: classification.description,
-          gl_account: classification.gl_account,
-          branch: classification.branch,
-          division: classification.division,
-          payment_method: classification.payment_method,
-          confidence: classification.confidence,
-          updated_at: new Date().toISOString()
-        };
+        // Update invoice with extracted data and classification (with retry)
+        if (classification) {
+          const updateData = {
+            ...extractedData,
+            category: classification.category,
+            subcategory: classification.subcategory,
+            description: classification.description,
+            gl_account: classification.gl_account,
+            branch: classification.branch,
+            division: classification.division,
+            payment_method: classification.payment_method,
+            confidence: classification.confidence,
+            updated_at: new Date().toISOString()
+          };
 
-        const { error: updateError } = await supabaseServer
-          .from('invoice_class_invoices')
-          .update(updateData)
-          .eq('id', invoiceRecord.id);
-
-        if (updateError) {
-          console.error('❌ Failed to update invoice with extracted data:', updateError);
-          // Don't fail the request, just log the error
-        } else {
-          console.log('✅ Invoice updated with extracted data');
+          // Retry database update with connection resilience
+          let updateSuccess = false;
+          let updateAttempts = 0;
           
-          // Update vendor profile if we have vendor name and amount (non-blocking)
-          if (extractedData.vendor_name && extractedData.amount) {
+          while (!updateSuccess && updateAttempts < MAX_RETRIES) {
+            try {
+              const { error: updateError } = await supabaseServer
+                .from('invoice_class_invoices')
+                .update(updateData)
+                .eq('id', invoiceRecord.id);
+
+              if (updateError) {
+                throw updateError;
+              }
+              
+              updateSuccess = true;
+              console.log('✅ Invoice updated with extracted data');
+            } catch (updateError) {
+              updateAttempts++;
+              console.warn(`⚠️ Database update attempt ${updateAttempts}/${MAX_RETRIES} failed:`, updateError);
+              
+              if (updateAttempts >= MAX_RETRIES) {
+                console.error('❌ Failed to update invoice with extracted data after multiple attempts');
+                break;
+              } else {
+                // Wait before retry
+                await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_BASE * updateAttempts));
+              }
+            }
+          }
+          
+          // Update vendor profile if we have vendor name and amount (non-blocking with retry)
+          if (extractedData.vendor_name && extractedData.amount && updateSuccess) {
             try {
               await updateVendorProfile(
                 extractedData.vendor_name,
@@ -227,28 +295,44 @@ export async function POST(req: NextRequest) {
           }
         }
       } catch (classificationError) {
-        console.error('❌ Classification failed:', classificationError);
+        console.error('❌ Classification process failed:', classificationError);
         // Don't fail the request, just log the error
       }
     } else {
       console.warn('⚠️ Failed to extract data from PDF, invoice will remain with default values');
     }
 
-    // Create audit trail entry (non-blocking)
+    // Create audit trail entry (non-blocking with retry)
     try {
-      await supabaseServer
-        .from('invoice_class_invoice_audit_trail')
-        .insert({
-          invoice_id: invoiceRecord.id,
-          action: 'pdf_uploaded_direct',
-          performed_by: 'ui_user',
-          details: {
-            filename: file.name,
-            file_size: file.size,
-            upload_method: 'drag_drop',
-            extraction_success: !!extractedData
+      let auditSuccess = false;
+      let auditAttempts = 0;
+      
+      while (!auditSuccess && auditAttempts < MAX_RETRIES) {
+        try {
+          await supabaseServer
+            .from('invoice_class_invoice_audit_trail')
+            .insert({
+              invoice_id: invoiceRecord.id,
+              action: 'pdf_uploaded_direct',
+              performed_by: 'ui_user',
+              details: {
+                filename: file.name,
+                file_size: file.size,
+                upload_method: 'drag_drop',
+                extraction_success: !!extractedData
+              }
+            });
+          auditSuccess = true;
+        } catch (auditError) {
+          auditAttempts++;
+          if (auditAttempts >= MAX_RETRIES) {
+            console.warn('⚠️ Failed to create audit trail after multiple attempts (non-critical):', auditError);
+            break;
+          } else {
+            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_BASE * auditAttempts));
           }
-        });
+        }
+      }
     } catch (auditError) {
       console.warn('⚠️ Failed to create audit trail (non-critical):', auditError);
     }
@@ -266,24 +350,58 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error('💥 Direct PDF upload error:', error);
     
-    // Cleanup: If we created an invoice record but failed later, mark it as failed
+    // Enhanced cleanup with retry logic
     if (invoiceRecord) {
-      try {
-        await supabaseServer
-          .from('invoice_class_invoices')
-          .update({ 
-            status: 'failed',
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', invoiceRecord.id);
-      } catch (cleanupError) {
-        console.error('❌ Failed to cleanup failed invoice:', cleanupError);
+      let cleanupSuccess = false;
+      let cleanupAttempts = 0;
+      
+      while (!cleanupSuccess && cleanupAttempts < MAX_RETRIES) {
+        try {
+          await supabaseServer
+            .from('invoice_class_invoices')
+            .update({ 
+              status: 'failed',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', invoiceRecord.id);
+          cleanupSuccess = true;
+          console.log('✅ Marked invoice as failed for cleanup');
+        } catch (cleanupError) {
+          cleanupAttempts++;
+          console.warn(`⚠️ Cleanup attempt ${cleanupAttempts}/${MAX_RETRIES} failed:`, cleanupError);
+          
+          if (cleanupAttempts >= MAX_RETRIES) {
+            console.error('❌ Failed to cleanup failed invoice after multiple attempts:', cleanupError);
+            break;
+          } else {
+            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_BASE * cleanupAttempts));
+          }
+        }
       }
     }
     
+    // Return appropriate error response based on error type
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const isTimeoutError = errorMessage.includes('timeout');
+    const isDbError = errorMessage.includes('db_termination') || errorMessage.includes('connection');
+    
+    let statusCode = 500;
+    let userMessage = 'Failed to upload and process PDF';
+    
+    if (isTimeoutError) {
+      statusCode = 408; // Request Timeout
+      userMessage = 'Processing timeout - please try again with a smaller file';
+    } else if (isDbError) {
+      statusCode = 503; // Service Unavailable
+      userMessage = 'Service temporarily unavailable - please try again';
+    }
+    
     return NextResponse.json(
-      { error: 'Failed to upload and process PDF' },
-      { status: 500 }
+      { 
+        error: userMessage,
+        details: process.env.NODE_ENV === 'development' ? errorMessage : undefined
+      },
+      { status: statusCode }
     );
   }
 }
